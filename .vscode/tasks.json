@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Verify",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "verify"],
+      "windows": { "command": "npm.cmd" },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "windows": { "command": "npm.cmd" },
+      "group": "build",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "Develop",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "windows": { "command": "npm.cmd" },
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

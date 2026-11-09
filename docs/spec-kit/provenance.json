@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/github/spec-kit",
+  "release": "v1.4.0",
+  "commit": "0019fa14d12f45edabc2cc3176c9168a68bd0f97",
+  "preset": "lean",
+  "integration": "codex",
+  "generatedWith": "specify init mp3-sdd-scaffold --integration codex --integration-options='--events false' --script py --preset lean --non-interactive",
+  "scope": "Only the five unchanged Lean skills are vendored. Full-workflow scripts and templates are not required or included.",
+  "sha256": {
+    ".agents/skills/speckit-constitution/SKILL.md": "1d1e7309b160d58ca45550e7afd2ec363fbeae6ff878daa775519b359e4cb966",
+    ".agents/skills/speckit-implement/SKILL.md": "067b84a7cf042d9e5d9103735e237a814acf3da21a622dd9eecf6cd709220d0e",
+    ".agents/skills/speckit-plan/SKILL.md": "5a5b0f811e49c55d3643f9a3915d03990fa8d308f13f6a3017101c2772742762",
+    ".agents/skills/speckit-specify/SKILL.md": "4b9a371177b4b1ad60ea8204b62a6da3cb6ca375bae0f92cd08888de87a4ba04",
+    ".agents/skills/speckit-tasks/SKILL.md": "1ce843e74629c61f49d82f13f59ca1624e6d86c74ab5e35b8ae59b33e5d7362c"
+  }
+}

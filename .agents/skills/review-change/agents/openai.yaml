@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review a change"
+  short_description: "Review behavior, ownership and verification evidence"
+  default_prompt: "Use $review-change to assess this feature against its specification and report actionable findings."

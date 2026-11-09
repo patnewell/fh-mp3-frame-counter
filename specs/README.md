@@ -1,0 +1,21 @@
+# Delivery map
+
+Bootstrap establishes the compiler, checks, project principles, and agent tooling.
+The application is delivered through small, sequential Spec Kit Lean cycles:
+
+| Planned cycle                    | Observable outcome                                                                            |
+| -------------------------------- | --------------------------------------------------------------------------------------------- |
+| 001 · Count uploaded MP3         | Working HTTP endpoint, indexed MPEG-1 frames, original sample and useful errors.              |
+| 002 · Complete MP3 compatibility | Agreed free-format and metadata cases with independent fixtures and explicit ambiguity rules. |
+| 003 · Bound upload resource use  | Large, concurrent, stalled and cancelled uploads have bounded resource impact.                |
+| 004 · Operate the service        | Runtime validation, safe logs, probes, graceful drain and container/CI verification.          |
+
+Only the active cycle has implementation tasks. Specify the next cycle after the
+previous one is verified and merged. Early cycles are intermediate milestones,
+not a claim that every final assignment requirement has already been delivered.
+Tests and relevant documentation accompany each cycle; they are not deferred to
+a final quality phase. A complete cycle has a short verification record with the
+tested revision, actual commands, findings, and any remaining limits.
+
+The constitution holds durable principles. Specifications describe observable
+requirements; plans explain implementation choices, including temporary storage.
