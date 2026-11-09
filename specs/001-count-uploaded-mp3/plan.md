@@ -1,14 +1,14 @@
 # 001 · Implementation plan
 
 Read the constitution and C01–C09 before implementation. The application uses
-Fastify5.12.8/multipart10.1.8, TypeScript7.0.2, Node24.22.3, Vitest5.1.0 and Biome2.6.6.
-Node24.22.3 now has a published official slim image; keep later container and
+Fastify 5.12.8/multipart 10.1.8, TypeScript 7.0.2, Node 24.22.3, Vitest 5.1.0 and Biome 2.6.6.
+Node 24.22.3 now has a published official slim image; keep later container and
 native runtime pins aligned. The project lockfile fixes exact package versions.
 
 ## Decisions
 
 - **Temporary staging:** stream the file into an exclusively created fixed-name
-  file in a private temporary directory, then count using a64KiB positional cache.
+  file in a private temporary directory, then count using a 64 KiB positional cache.
   This provides a completed-file boundary for EOF checks and later compatibility
   work. It adds storage I/O and disposal; it is a revisitable implementation
   decision, not a constitutional rule. Inline counting remains a future option.
@@ -29,13 +29,13 @@ native runtime pins aligned. The project lockfile fixes exact package versions.
 
 ## Files and ownership
 
-| Files | Responsibility |
-| --- | --- |
-| `src/mp3/{header,reader,tags,count,error}.ts` | Header interpretation, bounded reads, initial metadata, strict traversal and domain error |
-| `src/upload/{route,error}.ts`, `src/app.ts` | Multipart validation, private staging, disposal and HTTP mapping |
-| `src/server.ts` | Minimal executable startup; operational configuration comes in004 |
-| `tests/unit/mp3/`, `tests/integration/` | Pure structural vectors, real fixture and listening HTTP regressions |
-| `tests/fixtures/`, `scripts/verify-fixtures.ts` | Immutable asset identities and independent count evidence |
+| Files                                           | Responsibility                                                                            |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `src/mp3/{header,reader,tags,count,error}.ts`   | Header interpretation, bounded reads, initial metadata, strict traversal and domain error |
+| `src/upload/{route,error}.ts`, `src/app.ts`     | Multipart validation, private staging, disposal and HTTP mapping                          |
+| `src/server.ts`                                 | Minimal executable startup; operational configuration comes in 004                        |
+| `tests/unit/mp3/`, `tests/integration/`         | Pure structural vectors, real fixture and listening HTTP regressions                      |
+| `tests/fixtures/`, `scripts/verify-fixtures.ts` | Immutable asset identities and independent count evidence                                 |
 
 ## Implementation and review
 
@@ -43,4 +43,4 @@ Establish fixture evidence first. Parser and HTTP modules can be implemented
 independently against the agreed boundary within task T02; run integrated checks
 only once both exist. Add tests beside their changes. Review the entire feature,
 including malformed inputs and cleanup, before the complete verification gate.
-Do not implement002 compatibility or003 operational ownership ahead of their specs.
+Do not implement 002 compatibility or 003 operational ownership ahead of their specs.
