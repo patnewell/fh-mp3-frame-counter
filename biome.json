@@ -1,0 +1,47 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.6/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["**", "!package-lock.json", "!.agents", "!docs/spec-kit"] },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "linter": {
+    "rules": {
+      "preset": "recommended",
+      "suspicious": { "noExplicitAny": "error", "noImportCycles": "error" },
+      "style": { "useImportType": "error" }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/mp3/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "fastify",
+                      "fastify/**",
+                      "@fastify/**",
+                      "**/upload/**",
+                      "**/app.ts",
+                      "**/app.js",
+                      "**/config.ts",
+                      "**/config.js",
+                      "**/server.ts",
+                      "**/server.js"
+                    ],
+                    "message": "Keep MP3 framing independent of HTTP and application policy."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "javascript": { "formatter": { "quoteStyle": "double", "semicolons": "always" } }
+}
