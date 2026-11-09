@@ -1,0 +1,44 @@
+{
+  "fixtures": [
+    {
+      "file": "sample.mp3",
+      "bytes": 1458172,
+      "sha256": "97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3",
+      "expectedFrames": 6090,
+      "packetCount": 6089,
+      "carrierFrames": 1
+    },
+    {
+      "file": "cbr-stereo-44100.mp3",
+      "bytes": 8777,
+      "sha256": "52a02a2e1d196ae7c4c05180593578da4177b880c77c545f6ba449b2a17434e4",
+      "expectedFrames": 21,
+      "packetCount": 21,
+      "carrierFrames": 0
+    },
+    {
+      "file": "cbr-mono-32000-tags.mp3",
+      "bytes": 6687,
+      "sha256": "d780735d4868898f42d9e223c7165253a950a9ec1133b13d158666d2be4dd9aa",
+      "expectedFrames": 15,
+      "packetCount": 15,
+      "carrierFrames": 0
+    },
+    {
+      "file": "vbr-stereo-48000.mp3",
+      "bytes": 3740,
+      "sha256": "031662a3220ddb4aa84f979701c8095b432941f23991eef64b9deb336d04cac7",
+      "expectedFrames": 23,
+      "packetCount": 22,
+      "carrierFrames": 1
+    },
+    {
+      "file": "unsupported-mpeg2-22050.mp3",
+      "bytes": 3448,
+      "sha256": "78ff5f13a73748062f561ce6bb48467a130773c3870bf08fb8bc520c818d841e",
+      "expectedFrames": null,
+      "packetCount": 22,
+      "carrierFrames": 0
+    }
+  ]
+}

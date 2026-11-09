@@ -10,8 +10,9 @@ The application is delivered through small, sequential Spec Kit Lean cycles:
 | 003 · Bound upload resource use  | Large, concurrent, stalled and cancelled uploads have bounded resource impact.                |
 | 004 · Operate the service        | Runtime validation, safe logs, probes, graceful drain and container/CI verification.          |
 
-Only the active cycle has implementation tasks. Specify the next cycle after the
-previous one is verified and merged. Early cycles are intermediate milestones,
+Only the active cycle has work in progress; completed artifacts remain as delivery
+history. Specify the next cycle after the previous one is verified and merged.
+Early cycles are intermediate milestones,
 not a claim that every final assignment requirement has already been delivered.
 Tests and relevant documentation accompany each cycle; they are not deferred to
 a final quality phase. A complete cycle has a short verification record with the
