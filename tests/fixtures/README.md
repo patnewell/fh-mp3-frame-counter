@@ -35,3 +35,13 @@ ffmpeg -v error -i tests/fixtures/sample.mp3 -f null -
 Packet totals can omit a carrier frame; do not equate them automatically with
 physical frame counts. Keep filename, size, hash and independent evidence together
 when adding an asset. Do not replace the supplied sample.
+
+## Free-format compatibility
+
+`free-format-stereo-48000.mp3` is 26,400 bytes with 22 compatible boundaries at
+1,200-byte intervals. It is real 400 kb/s, 48 kHz stereo encoded audio. Retained
+LAME 3.100 authoring evidence reports 22 frames and 24,815 decoded PCM samples
+plus 529 skipped delay samples, matching 22 × 1,152. Its hash and header spacing
+were rechecked; LAME is unavailable, so a new LAME decode was not executed.
+FFprobe 7.1.5 does not decode this asset; that limitation does not make it invalid
+MPEG-1. The application must return 22 independently of these tool limitations.
