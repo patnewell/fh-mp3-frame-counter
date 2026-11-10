@@ -26,6 +26,17 @@ export function id3v1(): Buffer {
   return tag;
 }
 
+export function ape(payload: Buffer = Buffer.alloc(0), paired = false, version = 2000): Buffer {
+  const footer = Buffer.alloc(32);
+  footer.write("APETAGEX");
+  footer.writeUInt32LE(version, 8);
+  footer.writeUInt32LE(payload.length + 32, 12);
+  footer.writeUInt32LE(paired ? 0x8000_0000 : 0, 20);
+  const header = paired ? Buffer.from(footer) : Buffer.alloc(0);
+  if (paired) header.writeUInt32LE(0xa000_0000, 20);
+  return Buffer.concat([header, payload, footer]);
+}
+
 export async function withMp3<T>(
   bytes: Uint8Array,
   inspect: (path: string) => Promise<T>,
