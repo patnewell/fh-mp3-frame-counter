@@ -25,6 +25,17 @@ describe("metadata compatibility", () => {
     expect(await count(Buffer.concat([frame(), ape(Buffer.from("item"), false, 1000)]))).toBe(1);
   });
 
+  it("rejects an APEv1 descriptor that claims a version-two header pair", async () => {
+    const tag = ape(Buffer.alloc(0), true, 1000);
+    await expect(count(Buffer.concat([frame(), tag]))).rejects.toThrow(/APE/);
+  });
+
+  it("requires zero APEv1 footer flags under the strict compatibility policy", async () => {
+    const tag = ape(Buffer.alloc(0), false, 1000);
+    tag.writeUInt32LE(1, 20);
+    await expect(count(Buffer.concat([frame(), tag]))).rejects.toThrow(/APE/);
+  });
+
   it("keeps tag signatures inside audio payload and inside larger tags", async () => {
     const audio = frame();
     audio.write("APETAGEX", audio.length - 32);

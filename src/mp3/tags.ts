@@ -157,10 +157,12 @@ async function apeStart(
   const version = footer.readUInt32LE(8);
   const size = footer.readUInt32LE(12);
   const flags = footer.readUInt32LE(20);
-  const paired = (flags & 0x8000_0000) !== 0;
+  // Only APEv2 defines header-present flags; this service requires zero flags for v1.
+  const paired = version === 2000 && (flags & 0x8000_0000) !== 0;
   const start = end - size - (paired ? 32 : 0);
   if (
     (version !== 1000 && version !== 2000) ||
+    (version === 1000 && flags !== 0) ||
     size < 32 ||
     start < boundary ||
     (flags & 0x7fff_fffe) !== 0 ||

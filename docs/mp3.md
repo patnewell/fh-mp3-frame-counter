@@ -77,7 +77,7 @@ item or its semantic content.
 
 APEv1 has no header. This service uses strict zero-only flags for its footer;
 it does not reinterpret APEv2's header-present flag as a v1 pairing rule. The
-[format specification bundled by TagLib](https://raw.githubusercontent.com/taglib/taglib/master/taglib/ape/ape-tag-format.txt)
+[format specification bundled by TagLib](https://github.com/taglib/taglib/blob/master/taglib/ape/ape-tag-format.txt)
 also describes permissive readers that ignore v1 flags; this service intentionally
 rejects nonzero v1 flags instead.
 
