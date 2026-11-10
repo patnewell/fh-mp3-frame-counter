@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { fixturePath, formFor, withHttpApp } from "../helpers/http.ts";
+import { ape, id3, id3v1 } from "../helpers/mp3.ts";
 
 const invalidScenarios = [
   "unsupported-mpeg2",
@@ -31,6 +32,7 @@ describe("MP3 upload API", () => {
     ["cbr-stereo-44100.mp3", 21],
     ["cbr-mono-32000-tags.mp3", 15],
     ["vbr-stereo-48000.mp3", 23],
+    ["free-format-stereo-48000.mp3", 22],
   ] as const)("counts %s through a real HTTP socket", async (file, count) => {
     await withHttpApp({}, async ({ url, directory }) => {
       const response = await fetch(`${url}/file-upload`, {
@@ -55,6 +57,84 @@ describe("MP3 upload API", () => {
       const response = await fetch(`${url}/file-upload`, { method: "POST", body: form });
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ frameCount: 21 });
+    });
+  });
+
+  it("counts real audio wrapped in paired ID3 envelopes and stacked terminal tags", async () => {
+    const audio = await readFile(fixturePath("cbr-stereo-44100.mp3"));
+    const bytes = Buffer.concat([
+      id3(Buffer.from("leading metadata"), 4, true),
+      audio,
+      id3(Buffer.from("terminal metadata"), 4, true),
+      id3v1(),
+    ]);
+    await withHttpApp({}, async ({ url, directory }) => {
+      const response = await fetch(`${url}/file-upload`, { method: "POST", body: formFor(bytes) });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ frameCount: 21 });
+      expect(await readdir(directory)).toEqual([]);
+    });
+  });
+
+  it("maps a mismatched appended ID3 footer to HTTP 400 and still accepts the original audio", async () => {
+    const audio = await readFile(fixturePath("cbr-stereo-44100.mp3"));
+    const tag = id3(Buffer.from("metadata"), 4, true);
+    tag[tag.length - 1] = 0;
+    await withHttpApp({}, async ({ url, directory }) => {
+      const invalid = await fetch(`${url}/file-upload`, {
+        method: "POST",
+        body: formFor(Buffer.concat([audio, tag])),
+      });
+      expect(invalid.status).toBe(400);
+      expect(await invalid.json()).toEqual({ error: expect.any(String) });
+      expect(await readdir(directory)).toEqual([]);
+      const valid = await fetch(`${url}/file-upload`, { method: "POST", body: formFor(audio) });
+      expect(valid.status).toBe(200);
+      expect(await valid.json()).toEqual({ frameCount: 21 });
+    });
+  });
+
+  it.each([
+    { name: "leading APEv2", leading: true, version: 2000 },
+    { name: "terminal APEv1", leading: false, version: 1000 },
+    { name: "terminal APEv2", leading: false, version: 2000 },
+  ])("accepts a $name envelope around real audio", async ({ leading, version }) => {
+    const audio = await readFile(fixturePath("cbr-stereo-44100.mp3"));
+    const tag = ape(Buffer.from("envelope payload"), leading, version);
+    const bytes = Buffer.concat(leading ? [tag, audio] : [audio, tag]);
+    await withHttpApp({}, async ({ url, directory }) => {
+      const response = await fetch(`${url}/file-upload`, { method: "POST", body: formFor(bytes) });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ frameCount: 21 });
+      expect(await readdir(directory)).toEqual([]);
+    });
+  });
+
+  it("rejects an APE descriptor with nonzero reserved bytes", async () => {
+    const audio = await readFile(fixturePath("cbr-stereo-44100.mp3"));
+    const tag = ape();
+    tag[tag.length - 1] = 1;
+    await withHttpApp({}, async ({ url, directory }) => {
+      const response = await fetch(`${url}/file-upload`, {
+        method: "POST",
+        body: formFor(Buffer.concat([audio, tag])),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: expect.any(String) });
+      expect(await readdir(directory)).toEqual([]);
+    });
+  });
+
+  it("rejects an isolated unresolved free-format frame without leaking its private file", async () => {
+    const audio = await readFile(fixturePath("free-format-stereo-48000.mp3"));
+    await withHttpApp({}, async ({ url, directory }) => {
+      const response = await fetch(`${url}/file-upload`, {
+        method: "POST",
+        body: formFor(audio.subarray(0, 1200)),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: expect.any(String) });
+      expect(await readdir(directory)).toEqual([]);
     });
   });
 

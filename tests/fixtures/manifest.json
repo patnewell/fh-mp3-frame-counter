@@ -39,6 +39,14 @@
       "expectedFrames": null,
       "packetCount": 22,
       "carrierFrames": 0
+    },
+    {
+      "file": "free-format-stereo-48000.mp3",
+      "bytes": 26400,
+      "sha256": "c18b33d09dd6b25180278f439c4d5ea08ab2a1ace2ecb462cb54f4e5a9567b5e",
+      "expectedFrames": 22,
+      "packetCount": null,
+      "carrierFrames": 0
     }
   ]
 }

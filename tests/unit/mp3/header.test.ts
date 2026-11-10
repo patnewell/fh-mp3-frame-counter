@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readHeader } from "../../../src/mp3/header.ts";
 
-describe("indexed MPEG-1 Layer III headers", () => {
+describe("MPEG-1 Layer III headers", () => {
   it.each([
     ["fffb9000", 128, 44_100, 417],
     ["fffa9200", 128, 44_100, 418],
@@ -10,7 +10,27 @@ describe("indexed MPEG-1 Layer III headers", () => {
     ["fffb1000", 32, 44_100, 104],
     ["fffbe800", 320, 32_000, 1440],
   ])("reads the literal %s header", (hex, bitrateKbps, sampleRateHz, frameBytes) => {
-    expect(readHeader(Buffer.from(hex, "hex"))).toEqual({ bitrateKbps, sampleRateHz, frameBytes });
+    expect(readHeader(Buffer.from(hex, "hex"))).toMatchObject({
+      kind: "indexed",
+      bitrateKbps,
+      sampleRateHz,
+      frameBytes,
+    });
+  });
+
+  it.each([
+    ["fffb0000", 44_100, 0, 36],
+    ["fffa0000", 44_100, 0, 38],
+    ["fffb00c0", 44_100, 0, 21],
+    ["fffa00c0", 44_100, 0, 23],
+    ["fffb0600", 48_000, 1, 36],
+  ])("preserves free-format framing fields in %s", (hex, sampleRateHz, padding, minimumBytes) => {
+    expect(readHeader(Buffer.from(hex, "hex"))).toEqual({
+      kind: "free",
+      sampleRateHz,
+      padding,
+      minimumBytes,
+    });
   });
 
   it.each([
@@ -24,7 +44,6 @@ describe("indexed MPEG-1 Layer III headers", () => {
     ["Layer I", "ffff9000"],
     ["Layer II", "fffd9000"],
     ["reserved layer", "fff99000"],
-    ["deferred free format", "fffb0000"],
     ["reserved bitrate", "fffbf000"],
     ["reserved rate", "fffb9c00"],
     ["reserved emphasis", "fffb9002"],
