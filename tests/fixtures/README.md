@@ -5,15 +5,17 @@
 The [manifest](manifest.json) records byte identity and independent physical counts.
 Tests must never use the application parser to establish their expected answers.
 
-| File                          | Independent evidence                          | Expected result |
-| ----------------------------- | --------------------------------------------- | --------------- |
-| `sample.mp3`                  | 6,089 FFprobe packets plus one Xing carrier   | 6,090           |
-| `cbr-stereo-44100.mp3`        | 21 decoded/indexed packets                    | 21              |
-| `cbr-mono-32000-tags.mp3`     | 15 decoded/indexed packets, leading ID3       | 15              |
-| `vbr-stereo-48000.mp3`        | 22 packets plus one Xing carrier              | 23              |
-| `unsupported-mpeg2-22050.mp3` | Valid decoded MPEG-2 at 22.05 kHz, 22 packets | Reject          |
+| File                           | Independent evidence                                   | Expected result |
+| ------------------------------ | ------------------------------------------------------ | --------------- |
+| `sample.mp3`                   | 6,089 FFprobe packets plus one Xing carrier            | 6,090           |
+| `cbr-stereo-44100.mp3`         | 21 decoded/indexed packets                             | 21              |
+| `cbr-mono-32000-tags.mp3`      | 15 decoded/indexed packets, leading ID3                | 15              |
+| `vbr-stereo-48000.mp3`         | 22 packets plus one Xing carrier                       | 23              |
+| `free-format-stereo-48000.mp3` | Retained LAME evidence; fresh identity/boundary checks | 22              |
+| `unsupported-mpeg2-22050.mp3`  | Valid decoded MPEG-2 at 22.05 kHz, 22 packets          | Reject          |
 
-FFprobe and FFmpeg 7.1.5 packet/decode checks were executed on 2026-11-11.
+FFprobe and FFmpeg 7.1.5 packet/decode checks for the five indexed fixtures were
+executed on 2026-11-11. Free-format evidence is qualified separately below.
 Carrier adjustment is independently visible: the sample's leading ID3 ends at
 byte 44, Xing is at 80, and the first FFprobe audio packet starts at 252. The VBR
 fixture has corresponding offsets 68, 104, 260. Metadata totals and duration are

@@ -71,7 +71,7 @@ it waits for the complete HTTP body and disposes request data before success.
 - [Fixture evidence](tests/fixtures/README.md): unchanged assets and independent expectations.
 - [AGENTS.md](AGENTS.md) / [SKILLS.md](SKILLS.md): focused guidance and official Lean skills.
 
-Feature 001 is an intermediate milestone. It supports indexed CBR/VBR frames,
-leading ID3 and terminal ID3v1. Free-format/additional metadata, full request
-lifecycle protection and operational deployment are subsequent cycles in the
-delivery map; this milestone is not the completed release.
+Features 001 and 002 provide indexed CBR/VBR, resolvable free-format, leading
+ID3/paired APEv2 and validated terminal metadata. Search ambiguity has explicit
+ordering and budgets. Full request lifecycle protection and operational deployment
+are subsequent cycles in the delivery map; this is still an intermediate milestone.

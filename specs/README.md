@@ -3,12 +3,12 @@
 Bootstrap establishes the compiler, checks, project principles, and agent tooling.
 The application is delivered through small, sequential Spec Kit Lean cycles:
 
-| Planned cycle                    | Observable outcome                                                                            |
-| -------------------------------- | --------------------------------------------------------------------------------------------- |
-| 001 · Count uploaded MP3         | Working HTTP endpoint, indexed MPEG-1 frames, original sample and useful errors.              |
-| 002 · Complete MP3 compatibility | Agreed free-format and metadata cases with independent fixtures and explicit ambiguity rules. |
-| 003 · Bound upload resource use  | Large, concurrent, stalled and cancelled uploads have bounded resource impact.                |
-| 004 · Operate the service        | Runtime validation, safe logs, probes, graceful drain and container/CI verification.          |
+| Cycle                                                                      | Observable outcome and evidence                                                                                                               |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [001 · Count uploaded MP3](001-count-uploaded-mp3/spec.md)                 | Verified and merged: working endpoint, indexed frames, original sample and useful errors. [Evidence](001-count-uploaded-mp3/verification.md). |
+| [002 · Complete MP3 compatibility](002-complete-mp3-compatibility/spec.md) | Free-format and metadata cases with independent fixtures, deterministic ambiguity rules and file-owned search limits.                         |
+| 003 · Bound upload resource use                                            | Large, concurrent, stalled and cancelled uploads have bounded resource impact.                                                                |
+| 004 · Operate the service                                                  | Runtime validation, safe logs, probes, graceful drain and container/CI verification.                                                          |
 
 Only the active cycle has work in progress; completed artifacts remain as delivery
 history. Specify the next cycle after the previous one is verified and merged.

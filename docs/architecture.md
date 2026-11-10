@@ -13,17 +13,18 @@ receives a private file, calls the parser and disposes the data. App constructio
 and process startup remain separate. Mutable state belongs to an instance or
 request; there is no account, patient, database or persistent-media model.
 
-| File                  | Responsibility                                                               |
-| --------------------- | ---------------------------------------------------------------------------- |
-| `src/app.ts`          | Construct one Fastify instance and register the upload scope                 |
-| `src/server.ts`       | Start the compiled executable                                                |
-| `src/upload/route.ts` | Validate transport headers, stream/complete the request, stage/count/dispose |
-| `src/upload/error.ts` | Map known failures and hide unexpected exception details                     |
-| `src/mp3/header.ts`   | Pure MPEG header interpretation and indexed frame lengths                    |
-| `src/mp3/reader.ts`   | Bounded positional file reads and cancellation checks                        |
-| `src/mp3/tags.ts`     | Initial ID3 envelope validation at established boundaries                    |
-| `src/mp3/count.ts`    | Descriptor ownership and physical frame traversal                            |
-| `src/mp3/error.ts`    | Domain-specific invalid-media error                                          |
+| File                     | Responsibility                                                               |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `src/app.ts`             | Construct one Fastify instance and register the upload scope                 |
+| `src/server.ts`          | Start the compiled executable                                                |
+| `src/upload/route.ts`    | Validate transport headers, stream/complete the request, stage/count/dispose |
+| `src/upload/error.ts`    | Map known failures and hide unexpected exception details                     |
+| `src/mp3/header.ts`      | Pure MPEG header interpretation and indexed/free-format classification       |
+| `src/mp3/free-format.ts` | Ascending candidate search and file-owned framing work limits                |
+| `src/mp3/reader.ts`      | Bounded positional file reads and cancellation checks                        |
+| `src/mp3/tags.ts`        | Leading/terminal envelope validation and file-owned metadata ambiguity limit |
+| `src/mp3/count.ts`       | Descriptor ownership, physical traversal and iterative candidate checkpoints |
+| `src/mp3/error.ts`       | Domain-specific invalid-media error                                          |
 
 Read app, upload route, then count to follow a successful request. There is no DI
 container, controller/service/repository layer stack, barrel hierarchy or generic
@@ -34,8 +35,9 @@ rule with both permitted and forbidden code.
 
 The upload is streamed to a private directory using an exclusive fixed filename;
 the client filename is never a path. Parsing uses one 64 KiB cache. This yields a
-completed-file view and makes EOF checks and later seek-dependent compatibility
-work straightforward. It costs a write/read pass and explicit disposal.
+completed-file view for EOF checks, terminal metadata and free-format replay.
+It costs a write/read pass and explicit disposal. Numeric checkpoints retain
+candidate state without holding a scan buffer per alternative.
 
 For ordinary indexed frames, inline counting could overlap upload with parsing
 and avoid whole-file staging. That alternative would need explicit chunk-boundary,
