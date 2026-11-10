@@ -31,4 +31,6 @@ deployment features are introduced here.
 
 CRC values, compressed audio samples and metadata item contents remain outside
 structural validation. MPEG-2/2.5 and other layers remain outside the assignment.
+APEv1 is footer-only: this service requires its flags to be zero and never infers
+an APEv1 header. Only APEv2 has a header/footer pairing interpretation.
 Record actual verification before merging and selecting 003.
