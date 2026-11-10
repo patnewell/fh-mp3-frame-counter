@@ -12,11 +12,13 @@ Temporary staging supplies seek/replay without holding uploaded bytes in JS memo
   accounting. Store numeric offsets/header values, not captured scan buffers.
 - Let `count.ts` retain iterative candidate checkpoints. A failing suffix retries
   an earlier choice with its saved count; a complete valid suffix commits the
-  interpretation. Charge scanned candidate positions and traversed frame extents,
+  interpretation. Search candidate boundaries in ascending offset order and retry
+  saved choices depth-first. Charge scanned positions and traversed frame extents,
   with 4,096 selections and 8× size work budgets.
 - Evolve `tags.ts` to validate leading and terminal envelopes. Walk terminal chains
-  backward from EOF with an explicit stack of alternative ends; bound choices,
-  not normal tag depth. Never trim tags before a frame boundary is established.
+  backward from EOF with an explicit stack of alternative ends. Keep its 4,096
+  alternative-choice allowance file-owned across repeated suffix checks; bound
+  choices, not normal tag depth. Never trim tags before a frame boundary is established.
 - Preserve separate error categories and cancellation. No domain import of HTTP,
   environment or upload policy is permitted.
 
