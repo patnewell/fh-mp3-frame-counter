@@ -3,12 +3,12 @@
 Bootstrap establishes the compiler, checks, project principles, and agent tooling.
 The application is delivered through small, sequential Spec Kit Lean cycles:
 
-| Cycle                                                                      | Observable outcome and evidence                                                                                                               |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [001 · Count uploaded MP3](001-count-uploaded-mp3/spec.md)                 | Verified and merged: working endpoint, indexed frames, original sample and useful errors. [Evidence](001-count-uploaded-mp3/verification.md). |
-| [002 · Complete MP3 compatibility](002-complete-mp3-compatibility/spec.md) | Free-format and metadata cases with independent fixtures, deterministic ambiguity rules and file-owned search limits.                         |
-| 003 · Bound upload resource use                                            | Large, concurrent, stalled and cancelled uploads have bounded resource impact.                                                                |
-| 004 · Operate the service                                                  | Runtime validation, safe logs, probes, graceful drain and container/CI verification.                                                          |
+| Cycle                                                                      | Observable outcome and evidence                                                                                                                    |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [001 · Count uploaded MP3](001-count-uploaded-mp3/spec.md)                 | Verified and merged: working endpoint, indexed frames, original sample and useful errors. [Evidence](001-count-uploaded-mp3/verification.md).      |
+| [002 · Complete MP3 compatibility](002-complete-mp3-compatibility/spec.md) | Verified and merged: free-format/metadata, deterministic ambiguity and bounded search. [Evidence](002-complete-mp3-compatibility/verification.md). |
+| [003 · Bound upload resource use](003-bound-upload-resource-use/spec.md)   | App-owned admission and request deadlines/cancellation retain capacity through actual disposal; real HTTP lifecycle evidence.                      |
+| 004 · Operate the service                                                  | Runtime validation, safe logs, probes, graceful drain and container/CI verification.                                                               |
 
 Only the active cycle has work in progress; completed artifacts remain as delivery
 history. Specify the next cycle after the previous one is verified and merged.
