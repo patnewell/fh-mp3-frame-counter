@@ -50,18 +50,22 @@ Send one multipart file named `file` and no extra fields. File bytes determine
 format; filenames and part MIME claims are ignored. Content encoding must be
 absent or `identity`. Success contains only a positive integer `frameCount`.
 
-| Status | Meaning                                                                    |
-| ------ | -------------------------------------------------------------------------- |
-| 200    | Complete supported framing counted                                         |
-| 400    | Missing/wrong/empty file, malformed multipart, unsupported or invalid MPEG |
-| 413    | File-byte, file-count, field-count or part-count limit                     |
-| 415    | Unsupported request content type or encoding                               |
-| 500    | Safe generic processing/storage failure                                    |
+| Status | Meaning                                                                      |
+| ------ | ---------------------------------------------------------------------------- |
+| 200    | Complete supported framing counted                                           |
+| 400    | Missing/wrong/empty file, malformed multipart, unsupported or invalid MPEG   |
+| 413    | File-byte, file-count, field-count or part-count limit                       |
+| 415    | Unsupported request content type or encoding                                 |
+| 503    | Upload capacity full, admission stopped or admitted request deadline expired |
+| 500    | Safe generic processing/storage failure                                      |
 
 Error JSON has one `error` string. A sender still uploading rejected data can
 observe a connection close before reading the error. The default file limit is
-100 MiB. The app streams to a private temporary file and parses with bounded reads;
-it waits for the complete HTTP body and disposes request data before success.
+100 MiB, with four concurrent uploads per app and a 30-second admission-to-processing
+deadline. Busy/draining responses include `Retry-After: 1`. The app streams to a
+private temporary file and parses with bounded reads; it waits for the complete
+HTTP body and disposes request data before success. Cancellation does not release
+capacity while processing or removal is still pending.
 
 ## Read the implementation
 
@@ -69,9 +73,9 @@ it waits for the complete HTTP body and disposes request data before success.
 - [MP3 format](docs/mp3.md): headers, frame lengths, tags and physical carrier counts.
 - [Development](docs/development.md): native platform, VS Code, Codex and Git workflow.
 - [Fixture evidence](tests/fixtures/README.md): unchanged assets and independent expectations.
+- [Testing](docs/testing.md): real boundaries, deterministic lifecycle checks and coverage.
 - [AGENTS.md](AGENTS.md) / [SKILLS.md](SKILLS.md): focused guidance and official Lean skills.
 
-Features 001 and 002 provide indexed CBR/VBR, resolvable free-format, leading
-ID3/paired APEv2 and validated terminal metadata. Search ambiguity has explicit
-ordering and budgets. Full request lifecycle protection and operational deployment
-are subsequent cycles in the delivery map; this is still an intermediate milestone.
+Features 001–003 provide complete framing compatibility and bounded request
+ownership. Runtime configuration, safe logs, health endpoints, process shutdown and
+container/CI deployment remain the final cycle; this is an intermediate milestone.
