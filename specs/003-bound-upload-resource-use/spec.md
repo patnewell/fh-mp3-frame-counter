@@ -25,4 +25,10 @@ health endpoints and container deployment remain 004 work.
 The deadline is cooperative cancellation of asynchronous work, not a promise to
 preempt a blocked JavaScript event loop or an uninterruptible filesystem call.
 A process/container supervisor remains the final bound on a stuck replica.
+U06's drain/deadline applies to admitted requests. Busy/draining requests never
+acquire capacity: send their safe rejection and promptly close, without awaiting
+body completion, creating files or queuing. The same upload error shape and retry
+header apply during application close while a response is still deliverable.
+U09's stalled-header cases mean multipart-part headers after complete HTTP request
+headers. Partial HTTP headers precede admission and remain an ingress responsibility.
 Record actual verification before merging and selecting 004.

@@ -34,7 +34,12 @@ Discard rejected input within a 64 KiB allowance and the same request deadline;
 a delivered stream chunk can cross the allowance before consumption stops.
 Flush a small safe rejection and close the connection. Keep any admitted permit
 until draining, handler and cleanup work actually settle. Busy/draining requests
-do not queue or create temporary files and carry `Retry-After: 1`.
+do not queue or create temporary files and carry `Retry-After: 1`. They do not wait
+for rejected-body draining: send the small response and promptly close.
+
+Set Fastify's `return503OnClosing` to false so its built-in closing response does
+not bypass the stopped-admission hook and change the JSON shape or retry header.
+Application close still waits for every admitted operation to settle.
 
 The app disables competing transport timers for uploads in favor of its explicit
 lifetime; ingress still owns total header/body, receive/idle and connection limits.
