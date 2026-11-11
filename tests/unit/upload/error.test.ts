@@ -4,10 +4,17 @@ import { InvalidMp3Error } from "../../../src/mp3/error.ts";
 import { describeUploadError, UploadError } from "../../../src/upload/error.ts";
 
 describe("public upload failures", () => {
-  it.each([400, 413, 415] as const)("retains trusted %i failures", (status) => {
+  it.each([400, 413, 415, 503] as const)("retains trusted %i failures", (status) => {
     expect(describeUploadError(new UploadError(status, "Safe reason"))).toEqual({
       status,
       message: "Safe reason",
+    });
+  });
+  it("marks capacity and draining failures as retryable", () => {
+    expect(describeUploadError(new UploadError(503, "Busy", true))).toEqual({
+      status: 503,
+      message: "Busy",
+      retryAfter: 1,
     });
   });
   it.each(["FST_REQ_FILE_TOO_LARGE", "FST_FILES_LIMIT", "FST_FIELDS_LIMIT", "FST_PARTS_LIMIT"])(
@@ -49,6 +56,12 @@ describe("public upload failures", () => {
 });
 
 describe("application options", () => {
+  it.each([0, -1, 1.5, Number.NaN, 2_147_483_648])("rejects invalid timeout %s", (timeoutMs) => {
+    expect(() => createApp({ timeoutMs })).toThrow(RangeError);
+  });
+  it.each([0, -1, 1.5, Number.NaN])("rejects invalid app capacity %s", (maxUploads) => {
+    expect(() => createApp({ maxUploads })).toThrow(RangeError);
+  });
   it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])(
     "rejects invalid maximum %s",
     (maxFileBytes) => {
