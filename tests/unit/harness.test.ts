@@ -15,6 +15,8 @@ describe("repository guardrails", () => {
     ["upload policy", 'export { value } from "../upload/admission.ts";', false],
     ["application", 'export { value } from "../app.js";', false],
     ["configuration", 'export { value } from "../config.ts";', false],
+    ["operational logging", 'export { value } from "../logging.ts";', false],
+    ["health executable", 'export { value } from "../healthcheck.js";', false],
   ] as const)("checks the actual import policy: %s", async (_name, source, allowed) => {
     const directory = await mkdtemp(join(tmpdir(), "mp3-policy-"));
     try {
