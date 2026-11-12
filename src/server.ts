@@ -1,13 +1,13 @@
-import { createApp } from "./app.ts";
+import { type Application, createApp } from "./app.ts";
+import { readConfig } from "./config.ts";
 
-const { app } = createApp();
+let application: Application | undefined;
 try {
-  await app.listen({
-    host: process.env.HOST ?? "127.0.0.1",
-    port: Number(process.env.PORT ?? 3000),
-  });
+  const config = readConfig(process.env);
+  application = createApp(config);
+  await application.app.listen({ host: config.host, port: config.port });
 } catch {
   process.stderr.write("Service startup failed.\n");
-  await app.close();
+  await application?.app.close().catch(() => undefined);
   process.exitCode = 1;
 }
