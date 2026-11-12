@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { type ClientRequest, type IncomingHttpHeaders, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,7 +28,6 @@ interface RunningServer {
 
 interface ProcessSandbox {
   readonly cwd: string;
-  readonly directory: string;
   start(entry: URL, environment?: NodeJS.ProcessEnv, args?: readonly string[]): RunningProcess;
   server(
     environment?: NodeJS.ProcessEnv,
@@ -58,15 +57,13 @@ export async function withinProcess<T>(pending: Promise<T>, milliseconds = 5000)
   }
 }
 
-/** Every child runs outside the repository; finally owns termination and private files. */
+/** Every child runs outside the repository; finally owns termination and the isolated cwd. */
 export async function withProcessSandbox(
   inspect: (sandbox: ProcessSandbox) => Promise<void>,
 ): Promise<void> {
   const cwd = await mkdtemp(join(tmpdir(), "mp3 process "));
-  const directory = join(cwd, "private uploads");
   const children: RunningProcess[] = [];
   let results: PromiseSettledResult<ProcessResult>[] = [];
-  await mkdir(directory);
   const start = (entry: URL, environment: NodeJS.ProcessEnv = {}, args: readonly string[] = []) => {
     const child = observeProcess(
       spawn(process.execPath, [fileURLToPath(entry), ...args], {
@@ -80,7 +77,6 @@ export async function withProcessSandbox(
           REQUEST_TIMEOUT_MS: "5000",
           SHUTDOWN_GRACE_MS: "500",
           LOG_LEVEL: "info",
-          UPLOAD_TEMP_DIR: directory,
           ...environment,
         },
         stdio: ["ignore", "pipe", "pipe"],
@@ -92,7 +88,6 @@ export async function withProcessSandbox(
   try {
     await inspect({
       cwd,
-      directory,
       start,
       server: async (environment = {}, entry = compiledServer, args = []) => {
         const process = start(entry, environment, args);

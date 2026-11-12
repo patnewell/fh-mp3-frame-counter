@@ -24,7 +24,7 @@ export interface UploadProblem {
   readonly retryAfter?: 1;
 }
 
-/** Dependency and filesystem exception text must never become a public error. */
+/** Dependency and parser exception text must never become a public error. */
 export function describeUploadError(error: unknown): UploadProblem {
   if (error instanceof UploadError) {
     return {

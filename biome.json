@@ -25,6 +25,10 @@
                       "fastify",
                       "fastify/**",
                       "@fastify/**",
+                      "node:fs",
+                      "node:fs/**",
+                      "fs",
+                      "fs/**",
                       "**/upload/**",
                       "**/app.ts",
                       "**/app.js",
@@ -37,7 +41,7 @@
                       "**/server.ts",
                       "**/server.js"
                     ],
-                    "message": "Keep MP3 framing independent of HTTP and application policy."
+                    "message": "Keep MP3 framing independent of filesystems, HTTP and application policy."
                   }
                 ]
               }

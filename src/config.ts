@@ -1,11 +1,7 @@
-import { tmpdir } from "node:os";
-import { isAbsolute } from "node:path";
-
 const logLevels = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
 export type LogLevel = (typeof logLevels)[number];
 
 export interface AppOptions {
-  readonly tempDirectory?: string;
   readonly maxFileBytes?: number;
   readonly maxUploads?: number;
   readonly timeoutMs?: number;
@@ -13,7 +9,6 @@ export interface AppOptions {
 }
 
 export interface AppSettings {
-  readonly tempDirectory: string;
   readonly maxFileBytes: number;
   readonly maxUploads: number;
   readonly timeoutMs: number;
@@ -26,14 +21,9 @@ export interface RuntimeConfig extends AppSettings {
   readonly shutdownGraceMs: number;
 }
 
-/** Programmatic and environment configuration share the same range and path policy. */
+/** Programmatic and environment configuration share the same range policy. */
 export function resolveAppSettings(options: AppOptions = {}): AppSettings {
-  const tempDirectory = options.tempDirectory ?? tmpdir();
-  if (!isAbsolute(tempDirectory) || tempDirectory.includes("\0")) {
-    throw new Error("UPLOAD_TEMP_DIR must be an absolute directory path without NUL bytes.");
-  }
   return Object.freeze({
-    tempDirectory,
     maxFileBytes: integer(options.maxFileBytes ?? 100 * 1024 * 1024, "MAX_FILE_BYTES"),
     maxUploads: integer(options.maxUploads ?? 4, "MAX_UPLOADS"),
     timeoutMs: integer(options.timeoutMs ?? 30_000, "REQUEST_TIMEOUT_MS", 1, 2_147_483_647),
@@ -50,7 +40,6 @@ export function readConfig(environment: Readonly<NodeJS.ProcessEnv>): RuntimeCon
   }
   return Object.freeze({
     ...resolveAppSettings({
-      tempDirectory: environment.UPLOAD_TEMP_DIR ?? defaults.tempDirectory,
       maxFileBytes: decimal(environment.MAX_FILE_BYTES, "MAX_FILE_BYTES", defaults.maxFileBytes),
       maxUploads: decimal(environment.MAX_UPLOADS, "MAX_UPLOADS", defaults.maxUploads),
       timeoutMs: decimal(environment.REQUEST_TIMEOUT_MS, "REQUEST_TIMEOUT_MS", defaults.timeoutMs),

@@ -18,7 +18,7 @@ export type ServiceEvent =
   | {
       readonly event: "upload_failed";
       readonly requestId: string;
-      readonly category: "processing" | "cleanup";
+      readonly category: "processing";
     };
 
 /** Reconstruct an allowlisted record; framework messages and extra fields never reach output. */
@@ -88,10 +88,7 @@ function safeEvent(value: unknown): ServiceEvent | undefined {
     case "shutdown_failed":
       return { event: value.event };
     case "upload_failed":
-      if (
-        requestId(value.requestId) &&
-        (value.category === "processing" || value.category === "cleanup")
-      ) {
+      if (requestId(value.requestId) && value.category === "processing") {
         return { event: value.event, requestId: value.requestId, category: value.category };
       }
       return;

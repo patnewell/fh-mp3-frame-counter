@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { request } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
 import { describe, expect, it } from "vitest";
@@ -41,7 +41,7 @@ describe("multipart request contract", () => {
     'multipart/form-data; boundary="not;permitted"',
     `multipart/form-data; boundary=${"b".repeat(71)}`,
   ])("rejects an invalid delimiter before parsing: %s", async (contentType) => {
-    await withHttpApp({}, async ({ url, directory }) => {
+    await withHttpApp({}, async ({ url }) => {
       const response = await fetch(`${url}/file-upload`, {
         method: "POST",
         headers: { "content-type": contentType },
@@ -49,7 +49,6 @@ describe("multipart request contract", () => {
       });
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: "Provide a valid multipart boundary." });
-      expect(await readdir(directory)).toEqual([]);
     });
   });
 
@@ -97,8 +96,8 @@ describe("multipart request contract", () => {
     });
   });
 
-  it("rejects an incomplete first part and disposes partial bytes", async () => {
-    await withHttpApp({}, async ({ url, directory }) => {
+  it("rejects an incomplete first part", async () => {
+    await withHttpApp({}, async ({ url }) => {
       const response = await fetch(`${url}/file-upload`, {
         method: "POST",
         headers: { "content-type": "multipart/form-data; boundary=b" },
@@ -106,12 +105,11 @@ describe("multipart request contract", () => {
       });
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: expect.any(String) });
-      expect(await readdir(directory)).toEqual([]);
     });
   });
 
   it("does not finish a response while the HTTP epilogue remains open", async () => {
-    await withHttpApp({}, async ({ url, directory }) => {
+    await withHttpApp({}, async ({ url }) => {
       let responded = false;
       const outgoing = request(`${url}/file-upload`, {
         method: "POST",
@@ -134,7 +132,6 @@ describe("multipart request contract", () => {
         expect(responded).toBe(false);
         outgoing.end("epilogue");
         expect(await response).toBe('{"frameCount":21}');
-        expect(await readdir(directory)).toEqual([]);
       } finally {
         outgoing.destroy();
       }

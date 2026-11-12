@@ -34,7 +34,6 @@ describe("allowlisted operational logs", () => {
       logEvent(logger, { event: "shutdown_started", activeUploads: 1 });
       logEvent(logger, { event: "shutdown_forced", activeUploads: 1 });
       logEvent(logger, { event: "upload_failed", requestId, category: "processing" });
-      logEvent(logger, { event: "upload_failed", requestId, category: "cleanup" });
       logEvent(logger, { event: "server_stopped" });
       logEvent(logger, { event: "startup_failed" });
       logEvent(logger, { event: "shutdown_failed" });
@@ -48,12 +47,6 @@ describe("allowlisted operational logs", () => {
         event: "upload_failed",
         requestId,
         category: "processing",
-      }),
-      expect.objectContaining({
-        level: 50,
-        event: "upload_failed",
-        requestId,
-        category: "cleanup",
       }),
       expect.objectContaining({ level: 30, event: "server_stopped" }),
       expect.objectContaining({ level: 50, event: "startup_failed" }),
@@ -126,6 +119,7 @@ describe("allowlisted operational logs", () => {
     { event: "shutdown_forced", activeUploads: Number.POSITIVE_INFINITY },
     { event: "upload_failed", requestId: "client-supplied", category: "processing" },
     { event: "upload_failed", requestId, category: "private exception text" },
+    { event: "upload_failed", requestId, category: "cleanup" },
     {
       event: "request_completed",
       requestId,
