@@ -28,3 +28,9 @@ Tests assert the exact response objects. Trusted ingress owns TLS, authenticatio
 and fleet/tenant quotas. Structural counting remains separate from decoding,
 transcription and persistent ingestion workflows. No configuration file proves
 that Docker, a native platform or hosted protection has actually run.
+
+When operational logging is enabled, `server_started` includes the actual numeric
+bound port, including ephemeral-port selection. The healthcheck succeeds only
+after HTTP 200 from `/health/ready` completes; it discards the body rather than
+retaining or interpreting its JSON. The final shutdown timer must keep the process
+alive until unsettled work is classified, since a pending promise alone does not.
