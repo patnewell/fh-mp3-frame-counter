@@ -16,6 +16,11 @@ Add actual create/write/remove storage probes to startup and readiness in
 cache a completed result. Check admission again after awaited probing. Liveness
 does not depend on storage and saturation is distinct from draining.
 
+The close barrier also owns any in-flight storage probe, including one whose
+readiness client has disconnected. Stop admission before capturing that promise;
+do not report completed shutdown while its filesystem operations remain pending,
+or turn a failed probe/removal into a successful close.
+
 Add `healthcheck.ts` using built-in HTTP, a nonzero validated port, wildcard-to-
 loopback host selection and an absolute two-second AbortSignal deadline. Consume
 the response without retaining its body; exit silently with success only when
