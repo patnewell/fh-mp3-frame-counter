@@ -6,7 +6,7 @@
 
 ## Streaming service increment
 
-- [ ] [T02] Pass the actual file stream to the parser and retain settled stream/parser/rejection ownership in `src/upload/route.ts` and `src/upload/lifetime.ts`; remove storage from `src/app.ts`, `src/config.ts`, `src/logging.ts`, HTTP/process helpers and obsolete fixtures. Adapt/add real HTTP, lifecycle, readiness, config, privacy and compiled shutdown regressions throughout `tests/`. Within this increment, implement independent `scripts/`/Docker/resource checks and update affected current `README.md`, `docs/`, `AGENTS.md`, `SKILLS.md`, `.github/`, `.env.example` and `specs/README.md`. Run focused domain/HTTP/runtime checks and commit cohesive source/test and deployment/documentation changes before T03.
+- [x] [T02] Pass the actual file stream to the parser and retain settled stream/parser/rejection ownership in `src/upload/route.ts` and `src/upload/lifetime.ts`; remove storage from `src/app.ts`, `src/config.ts`, `src/logging.ts`, HTTP/process helpers and obsolete fixtures. Adapt/add real HTTP, lifecycle, readiness, config, privacy and compiled shutdown regressions throughout `tests/`. Within this increment, implement independent `scripts/`/Docker/resource checks and update affected current `README.md`, `docs/`, `AGENTS.md`, `SKILLS.md`, `.github/`, `.env.example` and `specs/README.md`. Run focused domain/HTTP/runtime checks and commit cohesive source/test and deployment/documentation changes before T03.
 
 ## Review and completion
 

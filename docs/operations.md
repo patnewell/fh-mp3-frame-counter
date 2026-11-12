@@ -1,128 +1,108 @@
-# Operations
+﻿# Operations
 
-The deployment target is a Linux container. See [development](development.md) for
-explicit Linux/Unix, macOS and native Windows setup, environment and Docker commands.
-[Verification](verification.md) distinguishes executed checks from remaining qualification.
+The deployment target is a Linux container. See [development](development.md)
+for native Linux/Unix, macOS and Windows commands. The
+[005 verification record](../specs/005-incremental-mp3-parsing/verification.md)
+separates actual checks/measurements from supplied but unexecuted checks.
 
 ## Configuration
 
-`readConfig` resolves and freezes primitive values at process startup.
-Programmatic app construction uses the same validation policy and defaults to
-silent logging. No module below a process entrypoint reads `process.env` directly.
-A `.env` file is not loaded automatically.
+`readConfig` validates and freezes primitive settings at startup. Programmatic
+app construction shares that policy and defaults to silent logging. Only process
+entrypoints read environment values. A `.env` file is not loaded automatically.
 
-| Variable             | Runtime default                             | Accepted values / meaning                                                                                               |
-| -------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `HOST`               | `127.0.0.1`; image `0.0.0.0`                | Nonblank, NUL-free host/address; Node must successfully bind it                                                         |
-| `PORT`               | `3000`                                      | Decimal integer 0–65,535; zero selects an ephemeral server port, while the external probe requires a fixed nonzero port |
-| `MAX_FILE_BYTES`     | `104857600` (100 MiB)                       | Positive safe integer, up to 9,007,199,254,740,991; file-part bytes                                                     |
-| `MAX_UPLOADS`        | `4`                                         | Positive safe integer; app-local concurrent admitted uploads                                                            |
-| `REQUEST_TIMEOUT_MS` | `30000`                                     | Decimal integer 1–2,147,483,647; admission through request processing                                                   |
-| `SHUTDOWN_GRACE_MS`  | `10000`                                     | Decimal integer 1–2,147,483,647; time to drain before forced connection cancellation                                    |
-| `UPLOAD_TEMP_DIR`    | Node's OS temporary directory; image `/tmp` | Existing, usable absolute directory without NUL bytes; private children are created inside it                           |
-| `LOG_LEVEL`          | `info`                                      | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`                                                            |
+| Variable             | Default                      | Accepted meaning                                                                   |
+| -------------------- | ---------------------------- | ---------------------------------------------------------------------------------- |
+| `HOST`               | `127.0.0.1`; image `0.0.0.0` | Nonblank, NUL-free host/address; Node must bind it                                 |
+| `PORT`               | `3000`                       | Decimal 0–65535; zero selects an ephemeral server port, but probes require nonzero |
+| `MAX_FILE_BYTES`     | `104857600` (100 MiB)        | Positive safe integer; file-part bytes                                             |
+| `MAX_UPLOADS`        | `4`                          | Positive safe integer; local admitted upload count                                 |
+| `REQUEST_TIMEOUT_MS` | `30000`                      | Decimal 1–2147483647; admission through processing                                 |
+| `SHUTDOWN_GRACE_MS`  | `10000`                      | Decimal 1–2147483647; drain before forced connection cancellation                  |
+| `LOG_LEVEL`          | `info`                       | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`                     |
 
-Integer values use decimal digits; signs, whitespace, fractions, exponent notation
-and overflow are rejected. Validation bounds are not recommended resource budgets.
-Choose limits that fit measured storage, memory and concurrency. Changing the
-container port also requires a matching published port and probe configuration.
+Signs, whitespace, fractions, exponent notation and unsafe integers are rejected.
+Validation ranges are not recommended production budgets. Size limits, concurrency
+and deadlines must fit measured workload and memory. `UPLOAD_TEMP_DIR` was removed
+in 005: uploads have no filesystem staging or storage dependency.
 
-## Probe behavior
+## Health and admission
 
-| Endpoint            | Healthy response          | Failure behavior                                                                     |
-| ------------------- | ------------------------- | ------------------------------------------------------------------------------------ |
-| `GET /health/live`  | 200, `{"status":"ok"}`    | Reflects the responding process; independent of temporary storage                    |
-| `GET /health/ready` | 200, `{"status":"ready"}` | 503, `{"status":"not-ready"}` while admission is stopped or storage cannot be probed |
+| Endpoint            | Normal result             | During draining                                     |
+| ------------------- | ------------------------- | --------------------------------------------------- |
+| `GET /health/live`  | 200, `{"status":"ok"}`    | Responds while the process can serve the route      |
+| `GET /health/ready` | 200, `{"status":"ready"}` | 503, `{"status":"not-ready"}` after admission stops |
 
-Startup and readiness perform a real private create/write/remove operation.
-Concurrent checks share only an in-flight probe; completed results are not cached.
-Readiness rechecks admission after awaiting storage. A full upload budget leaves
-readiness healthy; upload requests instead receive 503 with `Retry-After: 1`.
-Removing usable storage fails readiness while liveness remains available, and
-restoring it allows the next readiness check to recover.
+Readiness reflects accepting work. Temporary saturation leaves readiness healthy;
+excess uploads receive 503 with `Retry-After: 1`. No filesystem startup/readiness
+probe or replacement external dependency is involved.
 
-The close barrier captures and awaits an in-flight probe even after the readiness
-client disconnects. A failed probe/removal is not silently converted into a
-successful close. Probe files remain application-owned work until settlement.
+The compiled `dist/healthcheck.js` probes readiness with an absolute two-second
+deadline and discards the body. It exits silently: zero only after HTTP 200
+completes, one for configuration/transport/status/deadline failure. Wildcard binds
+map to loopback. Trickling bytes cannot extend the deadline. Docker uses a
+three-second command timeout, ten-second interval, five-second start period and
+three retries.
 
-The compiled `dist/healthcheck.js` uses Node HTTP and an absolute two-second
-deadline. It consumes the response without retaining the body and exits silently:
-zero only after HTTP 200 completes, one for configuration/transport/status/deadline
-failure. It maps wildcard binds to loopback. A trickling response cannot extend
-the deadline. Docker's command timeout is three seconds, with a ten-second
-interval, five-second start period and three retries.
+## Container policy and memory
 
-## Container policy and sizing
+The [Dockerfile](../Dockerfile) retains the digest-pinned Node 24.22.3 Bookworm
+Slim base. Its runtime payload is compiled JavaScript, production dependencies
+and package.json. Root owns code; the process runs as `node:node`.
 
-The [Dockerfile](../Dockerfile) pins the official Node 24.22.3 Bookworm Slim image
-to OCI index digest
-`sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54`.
-Separate build/dependency stages leave only `dist/`, production `node_modules/`
-and `package.json` under `/app`. Files belong to root; execution uses
-`node:node` (UID/GID 1000).
+The documented/smoke launch uses a read-only root, init, dropped capabilities,
+no new privileges, one CPU, 128 PIDs and a 1 GiB memory limit. It has **no writable
+upload mount and no upload tmpfs**. Runtime restrictions come from the launch
+command; a Dockerfile alone does not enforce them.
 
-The smoke/documented launch policy sets a read-only root, init process, dropped
-capabilities, no new privileges, one CPU, 128 PIDs, 1 GiB memory and a 512 MiB
-`/tmp` tmpfs with `noexec,nosuid,mode=1777`. A different temporary directory
-requires its own writable mount. Runtime restrictions are supplied by the
-deployment command; a Dockerfile alone does not enforce them.
+The parser skips known payloads and large declared metadata bodies. It retains
+small descriptors, one borrowed current source chunk, numeric inference state,
+and at most 64 KiB of unknown terminal bytes. Network/multipart buffering, Node
+heap/native memory and the current producer chunk add overhead. A V8 old-space
+limit is not a total-process-memory cap. Four 100 MiB upload limits do not reserve
+400 MiB of staged files because those files no longer exist.
 
-Four 100 MiB uploads can occupy **400 MiB of active file data**. The tmpfs limit
-leaves room for probes and filesystem overhead, but its allocated pages also
-count against container memory; see [Docker's tmpfs guidance](https://docs.docker.com/engine/storage/tmpfs/).
-The 256 MiB V8 old-space limit is not a total-process-memory cap. Other heap spaces,
-buffers, native allocations and runtime overhead share the same container budget.
-Measure peak RSS, tmpfs use and OOM behavior under representative uploads before
-selecting production limits.
+Separate [resource checks](testing.md#large-input-resource-checks) lazily send more
+than 512 MiB using test-only limits. The native check observes server RSS separately
+from the client; the container variant enforces 256 MiB total container memory,
+a read-only root and no writable upload mount. Consult actual results before
+claiming measured memory behavior. Production throughput, tail latency, peak
+memory under representative concurrency and ingress behavior still require load
+measurement for the intended deployment.
 
-## Disposal, ingress and replicas
+## Cancellation, rejection and replicas
 
-Uploads use private `mp3-*` directories and a fixed `upload.mp3`, opened
-exclusively with mode 0600. Client filenames never become paths. Unix mode bits
-do not replace native Windows directory ACL policy.
+Request capacity remains held until its file stream, parser and rejection work
+settle. Deadlines and disconnects abort processing and close the owned stream;
+a response alone cannot release a slot. Busy/draining requests do not queue.
+Rejected bodies are consumed only within a 64 KiB allowance plus one crossing
+chunk and the admission deadline, then their connection closes. An actively
+sending client may observe a reset before reading error JSON.
 
-Disposal remains awaited after cancellation. A failed removal produces a safe
-operational failure and generic 500 when a response remains possible; capacity
-is released once the attempt settles. The file may remain. Crashes and forced
-exit can also leave orphans. There is no background removal retry or startup
-scavenger. Use disposable bounded storage; quiesce an owning instance before
-manually deleting orphan directories on persistent storage.
-
-Each replica/worker owns its local budget and temporary files. Requests need no
-shared filesystem, lock or session affinity, but the local budget is not a fleet
-or tenant quota. Trusted ingress supplies TLS, authentication/authorization, total
-HTTP header/body limits, receive/idle timeouts, connection limits and fleet/client
-quotas. Multipart preamble/epilogue bytes are not file-part bytes; incomplete HTTP
-headers precede application admission.
+There are no uploaded files to delete, disposal failures or upload orphan cleanup.
+Each replica owns its local budget and stream state. Requests need no shared
+filesystem, lock or session affinity; local admission is not a fleet/tenant quota.
+Trusted ingress supplies TLS, authentication, total transport/header limits,
+receive/idle timeouts, connection bounds and fleet/client quotas. Multipart
+preamble/epilogue bytes are not file-part bytes; incomplete HTTP headers precede
+application admission.
 
 ## Shutdown and diagnosis
 
-The first SIGINT/SIGTERM stops admission and starts close/drain. Repeated signals
-do not restart the grace period. At the default ten seconds, active connections
-are closed to invoke the established cancellation path. The process can exit zero
-once work and cleanup settle, including after cancellation. If work remains
-unsettled for one additional second, it exits one. The shutdown timers keep the
-process alive to classify that outcome; an unresolved promise alone would not.
+The first SIGINT/SIGTERM stops admission and starts close/drain; repeated signals
+do not restart grace. After the default ten seconds, active connections close
+to invoke cancellation. Settled work permits exit zero. Work still pending one
+second later causes exit one; referenced timers keep Node alive to classify it.
+Cancellation is cooperative and cannot preempt blocked JavaScript or an
+uninterruptible external operation.
 
-The documented and smoke launch commands set Docker's stop timeout to 15 seconds.
-Increase it when increasing
-`SHUTDOWN_GRACE_MS`, allowing for the additional final bound and scheduling margin.
-On native Windows, `Stop-Process`/child-process kill does not establish POSIX
-signal behavior; use the documented console/Docker guidance.
+Docker launch/smoke stop timeout is 15 seconds. Increase it when increasing
+`SHUTDOWN_GRACE_MS`, allowing the final bound and scheduling margin. A native
+Windows child-process kill is not POSIX graceful-shutdown evidence.
 
-Generated correlation IDs and fixed event/route/category values support diagnosis.
-The emitted events are `server_started` (actual port), `request_completed`
-(request ID, fixed route, status and elapsed milliseconds), `upload_failed`
-(request ID and processing/cleanup category), `shutdown_started` and
-`shutdown_forced` (active upload count), and `server_stopped`,
-`startup_failed` or `shutdown_failed`. Startup can emit a fixed failure record
-before logging is configured. Other events honor the configured log level.
-
-Application log serialization drops uploaded bytes, filenames, headers, raw
-URLs/queries, filesystem paths and arbitrary exception/message text, even at trace.
-This intentionally limits individual I/O diagnostics. Correlate safe events,
-resource metrics and readiness failures, then reproduce with nonprivate test data.
-Review any additional log field against the same boundary.
-
-A configured image/CI job is not execution evidence. Use the release verification
-record and actual container smoke output before treating a deployment as qualified.
+Generated request IDs and fixed event/route values support diagnosis. Events
+cover startup, request completion, unexpected processing failures and shutdown.
+The old storage-cleanup log category is removed. Uploaded bytes, filenames,
+headers, raw URLs/queries, paths, exception messages and arbitrary child context
+are excluded even at trace level. Correlate safe events and resource observations,
+then reproduce failures with nonprivate inputs.

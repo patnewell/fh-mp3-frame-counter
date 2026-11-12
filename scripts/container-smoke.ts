@@ -21,8 +21,9 @@ interface ContainerInspection {
     readonly Memory: number;
     readonly NanoCpus: number;
     readonly PidsLimit: number;
-    readonly Tmpfs: Readonly<Record<string, string>>;
+    readonly Tmpfs?: Readonly<Record<string, string>> | null;
   };
+  readonly Mounts: readonly { readonly Destination: string; readonly RW: boolean }[];
   readonly NetworkSettings: {
     readonly Ports: Readonly<
       Record<string, { readonly HostIp: string; readonly HostPort: string }[]>
@@ -86,7 +87,8 @@ function assertDeployment(container: ContainerInspection): string {
   assert.equal(policy.Memory, 1024 * 1024 * 1024);
   assert.equal(policy.NanoCpus, 1_000_000_000);
   assert.equal(policy.PidsLimit, 128);
-  assert.equal(policy.Tmpfs["/tmp"], "rw,noexec,nosuid,size=512m,mode=1777");
+  assert.deepEqual(Object.keys(policy.Tmpfs ?? {}), [], "The service must not require a tmpfs.");
+  assert.deepEqual(container.Mounts, [], "The service must not require an upload storage mount.");
   const bindings = container.NetworkSettings.Ports["3000/tcp"];
   assert.equal(bindings?.length, 1);
   const binding = bindings?.[0];
@@ -153,20 +155,9 @@ async function assertHttp(base: string): Promise<void> {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/);
   assert.deepEqual(await response.json(), { frameCount: 6090 });
-}
-
-async function assertDisposed(name: string): Promise<void> {
-  const deadline = Date.now() + 2000;
-  while (Date.now() < deadline) {
-    const entries = await docker(
-      ["exec", name, "ls", "-A1", "/tmp"],
-      Math.max(1, deadline - Date.now()),
-    );
-    if (!entries) return;
-    // A periodic readiness probe can briefly own a different private directory.
-    await delay(50);
-  }
-  throw new Error("Temporary data remained after the completed upload.");
+  const live = await fetch(`${base}/health/live`, { signal: AbortSignal.timeout(2000) });
+  assert.equal(live.status, 200);
+  assert.deepEqual(await live.json(), { status: "ok" });
 }
 
 async function assertCleanStop(name: string): Promise<void> {
@@ -234,8 +225,6 @@ async function main(): Promise<void> {
       "--label",
       label,
       "--read-only",
-      "--tmpfs",
-      "/tmp:rw,noexec,nosuid,size=512m,mode=1777",
       "--memory",
       "1g",
       "--cpus",
@@ -257,7 +246,6 @@ async function main(): Promise<void> {
     const base = assertDeployment(await waitForHealth(name));
     await assertRuntime(name);
     await assertHttp(base);
-    await assertDisposed(name);
     await docker(["exec", name, "node", "dist/healthcheck.js"]);
     await docker(["stop", "--time", "15", name]);
     const stopped = await inspect(name);
@@ -280,7 +268,7 @@ async function main(): Promise<void> {
   }
   if (failure) throw failure;
   console.log(
-    "Container smoke passed: sample 6090, probes, runtime policy, disposal and clean stop.",
+    "Container smoke passed: sample 6090, probes, no upload storage, runtime policy and clean stop.",
   );
 }
 

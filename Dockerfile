@@ -17,10 +17,9 @@ WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3000 \
-    UPLOAD_TEMP_DIR=/tmp \
     LOG_LEVEL=info \
     NODE_OPTIONS=--max-old-space-size=256
-# Root owns executable content; only the separately bounded temporary mount is writable.
+# Root owns executable content; the service needs no writable filesystem.
 COPY --from=compile /app/dist ./dist
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY package.json ./

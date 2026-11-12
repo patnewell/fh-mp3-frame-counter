@@ -54,6 +54,45 @@ is parser evidence, not a claim that the complete application gate has run.
 
 ## Completion evidence
 
-Implementation, full-gate, resource and complete-diff review results will be
-recorded here after execution. No container execution, memory improvement,
-throughput result or completed feature is claimed by this initial record.
+### Streaming service increment
+
+Commit `0d3c88d` contains the direct multipart-stream adapter, storage-free app/
+configuration/readiness, processing-only failure category and replacement HTTP/
+process ownership regressions. It also strengthens the actual parser import
+boundary to reject filesystem imports; a new executable Biome harness case
+verifies this. No coverage threshold/exclusion or fixture oracle was changed.
+
+The first complete working-tree `npm.cmd run verify` passed lint, typecheck,
+clean build and coverage: **332 passed, zero failed, three skipped** (335 cases
+across 20 files). Skips are only the real POSIX signal mechanisms on native
+Windows; the filesystem FIFO case was replaced by portable parser ownership.
+Additional focused review then added five permanent fallback-bound/cancellation/
+producer-reuse tests; the metadata suite passed **41/41**. The final count and
+clean-revision gate will be recorded below after complete-diff review.
+
+### Preliminary resource evidence
+
+The isolated native `npm.cmd run test:resources` passed on the working changes
+based on `861f998`: **536,871,536 bytes**, lazily generated as **61,168 × 8777**
+bytes, returned **1,284,528 = 61,168 × 21** physical frames and the server remained
+live. The fixture block's length/hash is checked independently of the parser.
+Server baseline RSS was 83,910,656 bytes; OS peak RSS was **100,499,456 bytes**
+(about 95.8 MiB), below the generous 256 MiB ceiling. There were 61 server memory
+observations; client peak RSS was separately 83,623,936 bytes. This execution was
+2026-11-12 22:20:14.845–22:20:19.985 UTC, not a backdated commit time.
+
+This is measured bounded-memory evidence for the lazy-input test, not a measured
+comparison with the old implementation or a production throughput benchmark.
+Review subsequently bounded the resource client's drain wait with its deadline
+signal and its final child-close observation to five seconds. A clean-revision
+resource run after these changes will be recorded below.
+
+Both `npm.cmd run test:container` and `npm.cmd run test:resources:container`
+stopped at preflight with **`spawn docker ENOENT`**. No Docker build, read-only
+runtime, enforced container-memory, upload or stop assertions executed here.
+The updated executable checks and CI steps are supplied; hosted execution,
+native Linux/macOS and production load remain unexecuted.
+
+### Final review and clean revision
+
+Pending complete-diff review and final clean-revision checks.

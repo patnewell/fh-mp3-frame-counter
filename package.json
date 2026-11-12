@@ -19,6 +19,8 @@
     "test:integration": "npm run build && vitest run tests/integration",
     "test:coverage": "npm run build && vitest run --coverage",
     "test:container": "node scripts/container-smoke.ts",
+    "test:resources": "npm run build && node scripts/resource-check.ts",
+    "test:resources:container": "node scripts/resource-check.ts --container",
     "verify": "npm run lint && npm run typecheck && npm run test:coverage",
     "fixtures:verify": "node scripts/verify-fixtures.ts"
   },
