@@ -11,16 +11,16 @@ Programmatic app construction uses the same validation policy and defaults to
 silent logging. No module below a process entrypoint reads `process.env` directly.
 A `.env` file is not loaded automatically.
 
-| Variable | Runtime default | Accepted values / meaning |
-| --- | --- | --- |
-| `HOST` | `127.0.0.1`; image `0.0.0.0` | Nonblank, NUL-free host/address; Node must successfully bind it |
-| `PORT` | `3000` | Decimal integer 0–65,535; zero selects an ephemeral server port, while the external probe requires a fixed nonzero port |
-| `MAX_FILE_BYTES` | `104857600` (100 MiB) | Positive safe integer, up to 9,007,199,254,740,991; file-part bytes |
-| `MAX_UPLOADS` | `4` | Positive safe integer; app-local concurrent admitted uploads |
-| `REQUEST_TIMEOUT_MS` | `30000` | Decimal integer 1–2,147,483,647; admission through request processing |
-| `SHUTDOWN_GRACE_MS` | `10000` | Decimal integer 1–2,147,483,647; time to drain before forced connection cancellation |
-| `UPLOAD_TEMP_DIR` | Node's OS temporary directory; image `/tmp` | Existing, usable absolute directory without NUL bytes; private children are created inside it |
-| `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent` |
+| Variable             | Runtime default                             | Accepted values / meaning                                                                                               |
+| -------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `HOST`               | `127.0.0.1`; image `0.0.0.0`                | Nonblank, NUL-free host/address; Node must successfully bind it                                                         |
+| `PORT`               | `3000`                                      | Decimal integer 0–65,535; zero selects an ephemeral server port, while the external probe requires a fixed nonzero port |
+| `MAX_FILE_BYTES`     | `104857600` (100 MiB)                       | Positive safe integer, up to 9,007,199,254,740,991; file-part bytes                                                     |
+| `MAX_UPLOADS`        | `4`                                         | Positive safe integer; app-local concurrent admitted uploads                                                            |
+| `REQUEST_TIMEOUT_MS` | `30000`                                     | Decimal integer 1–2,147,483,647; admission through request processing                                                   |
+| `SHUTDOWN_GRACE_MS`  | `10000`                                     | Decimal integer 1–2,147,483,647; time to drain before forced connection cancellation                                    |
+| `UPLOAD_TEMP_DIR`    | Node's OS temporary directory; image `/tmp` | Existing, usable absolute directory without NUL bytes; private children are created inside it                           |
+| `LOG_LEVEL`          | `info`                                      | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`                                                            |
 
 Integer values use decimal digits; signs, whitespace, fractions, exponent notation
 and overflow are rejected. Validation bounds are not recommended resource budgets.
@@ -29,9 +29,9 @@ container port also requires a matching published port and probe configuration.
 
 ## Probe behavior
 
-| Endpoint | Healthy response | Failure behavior |
-| --- | --- | --- |
-| `GET /health/live` | 200, `{"status":"ok"}` | Reflects the responding process; independent of temporary storage |
+| Endpoint            | Healthy response          | Failure behavior                                                                     |
+| ------------------- | ------------------------- | ------------------------------------------------------------------------------------ |
+| `GET /health/live`  | 200, `{"status":"ok"}`    | Reflects the responding process; independent of temporary storage                    |
 | `GET /health/ready` | 200, `{"status":"ready"}` | 503, `{"status":"not-ready"}` while admission is stopped or storage cannot be probed |
 
 Startup and readiness perform a real private create/write/remove operation.

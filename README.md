@@ -78,10 +78,10 @@ on macOS/Windows. The smoke command builds an isolated image/container, checks
 runtime restrictions, health, the original sample, disposal and clean stop, then
 removes its resources.
 
-| Platform | Container smoke |
-| --- | --- |
-| Linux/Unix | `npm run test:container` |
-| macOS | `npm run test:container` |
+| Platform           | Container smoke              |
+| ------------------ | ---------------------------- |
+| Linux/Unix         | `npm run test:container`     |
+| macOS              | `npm run test:container`     |
 | Windows PowerShell | `npm.cmd run test:container` |
 
 See [development](docs/development.md#run-the-linux-container) for manual launch

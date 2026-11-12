@@ -125,12 +125,12 @@ node dist/server.js
 After Ctrl+C, use `Remove-Item Env:PORT, Env:LOG_LEVEL`.
 `Stop-Process` is a forced termination and does not test POSIX graceful shutdown.
 
-| Action | Linux/Unix | macOS | Windows PowerShell |
-| --- | --- | --- | --- |
-| Liveness | `curl --include http://127.0.0.1:3001/health/live` | `curl --include http://127.0.0.1:3001/health/live` | `curl.exe --include http://127.0.0.1:3001/health/live` |
-| Readiness | `curl --include http://127.0.0.1:3001/health/ready` | `curl --include http://127.0.0.1:3001/health/ready` | `curl.exe --include http://127.0.0.1:3001/health/ready` |
-| Compiled probe against the same port | `PORT=3001 node dist/healthcheck.js` | `PORT=3001 node dist/healthcheck.js` | `$env:PORT = '3001'; node dist/healthcheck.js` |
-| Inspect probe exit code | `echo $?` | `echo $?` | `$LASTEXITCODE` |
+| Action                               | Linux/Unix                                          | macOS                                               | Windows PowerShell                                      |
+| ------------------------------------ | --------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------- |
+| Liveness                             | `curl --include http://127.0.0.1:3001/health/live`  | `curl --include http://127.0.0.1:3001/health/live`  | `curl.exe --include http://127.0.0.1:3001/health/live`  |
+| Readiness                            | `curl --include http://127.0.0.1:3001/health/ready` | `curl --include http://127.0.0.1:3001/health/ready` | `curl.exe --include http://127.0.0.1:3001/health/ready` |
+| Compiled probe against the same port | `PORT=3001 node dist/healthcheck.js`                | `PORT=3001 node dist/healthcheck.js`                | `$env:PORT = '3001'; node dist/healthcheck.js`          |
+| Inspect probe exit code              | `echo $?`                                           | `echo $?`                                           | `$LASTEXITCODE`                                         |
 
 Run the exit-code command immediately after the probe. The probe deliberately
 prints nothing. If overriding temporary storage, first create an absolute directory

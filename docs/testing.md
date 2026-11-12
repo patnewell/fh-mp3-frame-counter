@@ -7,21 +7,21 @@ scripts build first. Normal tests need no encoder, database or Docker daemon.
 
 ## Evidence by boundary
 
-| Location                                     | Purpose                                                                                                            |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `tests/unit/mp3/`                            | Pure headers, physical traversal, metadata, free-format ambiguity, reader limits and cancellation                  |
-| `tests/unit/upload/`                         | Admission isolation/idempotence/drain, option validation and safe error classification                             |
-| `tests/unit/config.test.ts`, `logging.test.ts` | Shared immutable configuration and actual root/nested-child log privacy at configured levels |
-| `tests/unit/harness.test.ts`                 | Exercise the actual Biome import boundary and verify official Lean skill hashes                                    |
-| `tests/integration/fixtures.test.ts`         | Hash and independently established results for real MP3s, plus a 71,901,184-byte real-audio traversal              |
-| `tests/integration/upload.test.ts`           | Real listening HTTP service, all fixtures, metadata, errors, storage failure/recovery and disposal                 |
-| `tests/integration/multipart.test.ts`        | MIME normalization, boundaries, encoding, multipart truncation and HTTP-body completion                            |
-| `tests/integration/upload-lifecycle.test.ts` | Real transport plus controlled count/disposal barriers for overload, cancellation, deadlines and settled ownership |
-| `tests/integration/closing.test.ts` | Real TCP keep-alive pipeline after `app.close()`, preserving the application's exact busy/draining response |
-| `tests/integration/operations.test.ts` | Actual startup/storage probes, liveness, readiness recovery and saturation policy |
-| `tests/integration/readiness-ownership.test.ts` | Disconnected readiness filesystem work remains owned by application close |
-| `tests/integration/process.test.ts` | Compiled startup/sample/health/privacy/failure behavior from an unrelated path, plus bounded shutdown |
-| `scripts/container-smoke.ts` | Actual Linux image build, runtime policy, probes, original upload, disposal and clean stop |
+| Location                                        | Purpose                                                                                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `tests/unit/mp3/`                               | Pure headers, physical traversal, metadata, free-format ambiguity, reader limits and cancellation                  |
+| `tests/unit/upload/`                            | Admission isolation/idempotence/drain, option validation and safe error classification                             |
+| `tests/unit/config.test.ts`, `logging.test.ts`  | Shared immutable configuration and actual root/nested-child log privacy at configured levels                       |
+| `tests/unit/harness.test.ts`                    | Exercise the actual Biome import boundary and verify official Lean skill hashes                                    |
+| `tests/integration/fixtures.test.ts`            | Hash and independently established results for real MP3s, plus a 71,901,184-byte real-audio traversal              |
+| `tests/integration/upload.test.ts`              | Real listening HTTP service, all fixtures, metadata, errors, storage failure/recovery and disposal                 |
+| `tests/integration/multipart.test.ts`           | MIME normalization, boundaries, encoding, multipart truncation and HTTP-body completion                            |
+| `tests/integration/upload-lifecycle.test.ts`    | Real transport plus controlled count/disposal barriers for overload, cancellation, deadlines and settled ownership |
+| `tests/integration/closing.test.ts`             | Real TCP keep-alive pipeline after `app.close()`, preserving the application's exact busy/draining response        |
+| `tests/integration/operations.test.ts`          | Actual startup/storage probes, liveness, readiness recovery and saturation policy                                  |
+| `tests/integration/readiness-ownership.test.ts` | Disconnected readiness filesystem work remains owned by application close                                          |
+| `tests/integration/process.test.ts`             | Compiled startup/sample/health/privacy/failure behavior from an unrelated path, plus bounded shutdown              |
+| `scripts/container-smoke.ts`                    | Actual Linux image build, runtime policy, probes, original upload, disposal and clean stop                         |
 
 Parser tests that use private temporary files are component tests in a strict
 taxonomy; the `unit` folder indicates their narrow scope, not a rule that every

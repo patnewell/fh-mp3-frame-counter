@@ -15,11 +15,11 @@ request; there is no account, patient, database or persistent-media model.
 
 | File                      | Responsibility                                                               |
 | ------------------------- | ---------------------------------------------------------------------------- |
-| `src/app.ts`              | Construct Fastify, app-owned admission/storage probes and the close barrier |
-| `src/config.ts`           | Validate and freeze programmatic/runtime settings without exposing values |
+| `src/app.ts`              | Construct Fastify, app-owned admission/storage probes and the close barrier  |
+| `src/config.ts`           | Validate and freeze programmatic/runtime settings without exposing values    |
 | `src/logging.ts`          | Serialize allowlisted events through the root logger without private context |
-| `src/server.ts`           | Bind the compiled executable and own bounded signal-driven shutdown |
-| `src/healthcheck.ts`      | Probe readiness with an absolute deadline and silent exit status |
+| `src/server.ts`           | Bind the compiled executable and own bounded signal-driven shutdown          |
+| `src/healthcheck.ts`      | Probe readiness with an absolute deadline and silent exit status             |
 | `src/upload/route.ts`     | Validate transport headers, stream/complete the request, stage/count/dispose |
 | `src/upload/error.ts`     | Map known failures and hide unexpected exception details                     |
 | `src/upload/admission.ts` | App-local synchronous permits, stopped admission and settled-work barrier    |
@@ -178,15 +178,15 @@ replica from service.
 
 ## Future changes
 
-| Change | Domain decision and first evidence |
-| --- | --- |
-| Add a checksum or framing summary | Keep only if it is byte-level inspection; specify an explicit compatible/new response contract and independent fixture expectations before changing the current exact JSON shape |
-| Support another MPEG version/layer | A deliberate extension of the framing domain; new tables/formulas, real independently counted fixtures and invalid/unsupported boundary tests |
-| Count while receiving | Revisit the staging plan in a new cycle; prove chunk-boundary, EOF/tag/free-format behavior, cancellation and memory/work limits while preserving existing compatibility or explicitly changing it |
-| Improve admission, cleanup or logging | Keep in this service's operational boundary; retain real lifecycle/privacy regressions and measure the resource effect |
-| Store uploads, resume jobs or deliver webhooks | Introduces durable ingestion/job ownership; usually a separate orchestrator/object-storage capability with a defined contract to this stateless inspection service |
-| Transcode, transcribe or infer clinical meaning | Different compute, privacy, domain and dependency concerns; use a separate capability/service unless an explicit scope decision and evidence justify expansion |
-| Add tenant authentication or fleet quotas | Integrate the trusted ingress/platform boundary; do not treat a per-process counter as a distributed policy |
+| Change                                          | Domain decision and first evidence                                                                                                                                                                 |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add a checksum or framing summary               | Keep only if it is byte-level inspection; specify an explicit compatible/new response contract and independent fixture expectations before changing the current exact JSON shape                   |
+| Support another MPEG version/layer              | A deliberate extension of the framing domain; new tables/formulas, real independently counted fixtures and invalid/unsupported boundary tests                                                      |
+| Count while receiving                           | Revisit the staging plan in a new cycle; prove chunk-boundary, EOF/tag/free-format behavior, cancellation and memory/work limits while preserving existing compatibility or explicitly changing it |
+| Improve admission, cleanup or logging           | Keep in this service's operational boundary; retain real lifecycle/privacy regressions and measure the resource effect                                                                             |
+| Store uploads, resume jobs or deliver webhooks  | Introduces durable ingestion/job ownership; usually a separate orchestrator/object-storage capability with a defined contract to this stateless inspection service                                 |
+| Transcode, transcribe or infer clinical meaning | Different compute, privacy, domain and dependency concerns; use a separate capability/service unless an explicit scope decision and evidence justify expansion                                     |
+| Add tenant authentication or fleet quotas       | Integrate the trusted ingress/platform boundary; do not treat a per-process counter as a distributed policy                                                                                        |
 
 Start with a cohesive module when a change still belongs to this domain. A table
 entry is not a requirement to create microservices: separate services make sense
