@@ -212,6 +212,22 @@ describe("compiled silent healthcheck", () => {
     );
   });
 
+  it("rejects a completed HTTP 503 readiness response silently", async () => {
+    await withProbeServer(
+      (_request, reply) => {
+        reply.writeHead(503);
+        reply.end('{"status":"not-ready"}');
+      },
+      async (port) => {
+        await withProcessSandbox(async (sandbox) => {
+          expect(
+            await withinProcess(sandbox.start(compiledHealthcheck, { PORT: String(port) }).exited),
+          ).toMatchObject({ code: 1, stdout: "", stderr: "" });
+        });
+      },
+    );
+  });
+
   it("fails silently when the destination refuses the connection", async () => {
     let closedPort = 0;
     await withProbeServer(
