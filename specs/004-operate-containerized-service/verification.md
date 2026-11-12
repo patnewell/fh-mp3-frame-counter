@@ -83,3 +83,36 @@ qualifications below remain. Agent review is not human approval.
   relevant documentation developed within this fourth cycle after 003's merge.
   Earlier evidence remains unchanged. The final archive is checked after merge
   and verified from its extraction; the delivery report identifies those results.
+
+## Native Windows follow-up (2026-11-12)
+
+Tested base revision `b8e43ab8bf99b9aeffcc23308a371ff65f3273b7` plus the
+uncommitted lifecycle-test correction and accompanying documentation in this
+working tree. Environment: native Windows x64, Node 24.22.3, npm 11.19.1.
+
+- `npm.cmd ci --ignore-scripts` succeeded: 104 packages installed, zero reported
+  vulnerabilities.
+- Before correction, `npm.cmd run verify` passed lint, typecheck and build but
+  failed one oversized-rejection test with `read ECONNRESET`: 313 passed,
+  one failed, four skipped. The [003 correction](../003-bound-upload-resource-use/verification.md#native-windows-regression-correction-2026-11-12)
+  aligns its response assertion with existing U06, preserving bounded disposal
+  and adding parser/nonretention/recovery assertions.
+- After correction, the focused lifecycle suite passed all 13 tests, then
+  `npm.cmd run verify` passed lint, strict typecheck, a clean build and coverage:
+  **314 passed, zero failed, four skipped**, across 19 files (18 passed,
+  one wholly skipped). Coverage: 96.99% statements, 95.59% branches,
+  97.64% functions and 99.35% lines. Thresholds/exclusions are unchanged.
+- The four skips are the existing Windows conditions: three real POSIX shutdown
+  signal cases and one readiness ownership case using a POSIX FIFO and SIGUSR2.
+  README now identifies them before the manual upload instructions; the
+  [testing guide](../../docs/testing.md#process-platform-and-container-checks)
+  explains each mechanism. No new skips were added.
+- Independent agent review applied `review-change` to the complete test/README/
+  testing-guide diff against the base and found no remaining issues. The oracle
+  permits only exact HTTP 415 JSON or `ECONNRESET`; closure, capacity, no parser/
+  retained data, and subsequent recovery remain required. `git diff --check`
+  passed. Agent review is not human approval.
+
+Linux/macOS, Docker and hosted CI were not rerun for this follow-up. The earlier
+Linux milestone, qualifications and delivery history above remain historical;
+this working-tree check does not establish a new packaged release.

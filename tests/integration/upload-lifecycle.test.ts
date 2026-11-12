@@ -227,11 +227,33 @@ describe("upload resource ownership over real HTTP", () => {
   });
 
   it("closes an oversized rejected body without waiting for HTTP EOF", async () => {
-    await withUploadApp({ timeoutMs: 5000 }, {}, async (service) => {
+    const count = vi.fn(countFrames);
+    await withUploadApp({ timeoutMs: 5000 }, { count }, async (service) => {
       const rejected = service.open({ "content-type": "application/octet-stream" });
       rejected.request.write(Buffer.alloc(128 * 1024));
-      expect((await within(rejected.response)).status).toBe(415);
+      const response = await within(rejected.response).catch((error: unknown) => {
+        // U06 permits a reset before the response arrives when unread input exceeds the drain budget.
+        expect(error).toMatchObject({ code: "ECONNRESET" });
+      });
+      if (response) {
+        expect(response.status).toBe(415);
+        expect(JSON.parse(response.body)).toEqual({
+          error: "Use multipart/form-data with one file field named file.",
+        });
+      }
       await within(rejected.closed);
+      expect(rejected.request.writableEnded).toBe(false);
+      await vi.waitFor(() => expect(service.admission.active).toBe(0), eventually);
+      expect(count).not.toHaveBeenCalled();
+      expect(await readdir(service.directory)).toEqual([]);
+
+      const recovered = service.open();
+      recovered.request.end(multipart(await audioBytes()));
+      expect(await within(recovered.response)).toMatchObject({
+        status: 200,
+        body: '{"frameCount":21}',
+      });
+      expect(count).toHaveBeenCalledTimes(1);
       expect(service.admission.active).toBe(0);
       expect(await readdir(service.directory)).toEqual([]);
     });

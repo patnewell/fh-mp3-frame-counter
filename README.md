@@ -35,6 +35,11 @@ node dist/server.js
 Normal tests need no database, media encoder or Docker daemon. The server listens
 on `http://127.0.0.1:3000`.
 
+On native Windows, expect **four skipped tests**: three require POSIX shutdown
+signals, and one uses a POSIX FIFO and signal to test readiness-probe ownership.
+They run on Linux/macOS; Windows process termination does not exercise those
+mechanisms. All other tests must pass. See [test details](docs/testing.md#process-platform-and-container-checks).
+
 From another terminal at the repository root:
 
 | Platform           | Upload command                                                                                  |

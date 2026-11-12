@@ -56,3 +56,20 @@ native macOS/Windows run or hosted CI run is claimed.
 Specification, plan and tasks preceded source implementation. This verified
 feature is merged before selecting 004; historical 001/002 evidence is preserved.
 Independent agent review is not human approval or measured team adoption.
+
+## Native Windows regression correction (2026-11-12)
+
+At base revision `b8e43ab8bf99b9aeffcc23308a371ff65f3273b7`, the README's
+full gate on Windows with Node 24.22.3 reproduced one failure:
+`closes an oversized rejected body without waiting for HTTP EOF` received
+`read ECONNRESET` instead of a readable 415. U06 already permits the connection
+to close before the response arrives; the test incorrectly required delivery.
+
+The working-tree correction accepts only the exact 415 JSON or `ECONNRESET`.
+It still requires bounded closure before client EOF, eventually released capacity,
+no parser call or retained files, and a successful subsequent upload. The focused
+lifecycle suite passed all 13 cases. Production behavior, acceptance, byte-bound
+tests, fixtures and coverage gates are unchanged. Independent diff review found
+no remaining issues. See the [004 follow-up](../004-operate-containerized-service/verification.md#native-windows-follow-up-2026-11-12)
+for the full Windows gate and skip accounting; earlier milestone evidence above
+remains historical.

@@ -44,9 +44,26 @@ The [004 record](../specs/004-operate-containerized-service/verification.md)
 explains review corrections, red/green regressions and the precise coverage scope.
 Subsequent evidence/merge commits do not change application behavior.
 
+## Native Windows follow-up
+
+On 2026-11-12, native Windows x64 with Node 24.22.3 / npm 11.19.1 reproduced
+one failure and four skips at base `b8e43ab8bf99b9aeffcc23308a371ff65f3273b7`.
+The oversized-rejection test required a delivered HTTP response even though U06
+allows a reset before delivery. The working-tree correction accepts only the exact
+415 JSON or `ECONNRESET`, retaining closure/ownership checks and adding no-parser,
+no-retained-data and recovery assertions; application behavior is unchanged.
+
+`npm.cmd ci --ignore-scripts` succeeded, and the corrected `npm.cmd run verify`
+passed lint, typecheck, build and coverage: **314 passed, zero failed, four
+skipped**, with the same coverage percentages and thresholds as the Linux gate
+above. The skips are the three POSIX shutdown signal tests and one POSIX FIFO/
+SIGUSR2 readiness ownership test. See the [004 follow-up record](../specs/004-operate-containerized-service/verification.md#native-windows-follow-up-2026-11-12)
+for review, regression evidence and limits. Linux/macOS, Docker and hosted CI were
+not rerun for this correction.
+
 ## Evidence scope
 
-All recorded local application gates use Linux x64 and Node 24.22.3. Historical
+The original milestone application gates use Linux x64 and Node 24.22.3. Historical
 counts remain 125 tests for 001, 187 for 002 and 227 for 003; the final operational
 cycle has 318. Coverage percentages measure only the stated
 source set; `server.ts` and `healthcheck.ts` are exercised as compiled child
@@ -63,9 +80,10 @@ application parser. See [fixture provenance](../tests/fixtures/README.md).
 - The actual Docker smoke was attempted and stopped at preflight because the
   Docker executable was absent (`spawn docker ENOENT`). No image build, runtime
   restriction, container upload, disposal or stop check is claimed as executed.
-- Native macOS, native Windows and hosted CI were not run here. Their jobs and
-  explicit commands are supplied. POSIX-only signal/filesystem test mechanisms
-  do not claim equivalent native Windows coverage.
+- Native macOS and hosted CI remain unexecuted in these records. Native Windows
+  was verified in the follow-up above; the original Linux milestone did not run
+  Windows. POSIX-only signal/filesystem test mechanisms do not claim equivalent
+  native Windows coverage.
 - The known multipart dependency skip-path qualification and the fresh real-wire
   regressions are described in [testing](testing.md#known-dependency-qualification).
   Passing those transport cases does not establish all dependency event orderings.

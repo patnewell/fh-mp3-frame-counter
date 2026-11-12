@@ -96,6 +96,25 @@ a CPU workload, patching filesystem APIs or adding a production-only seam. It
 requires the standard `mkfifo` utility on Linux/macOS and is explicitly skipped on
 native Windows; that skip concerns the test mechanism, not the application policy.
 
+These are the only four expected native Windows skips:
+
+- SIGTERM grace: an admitted upload completes and disposal precedes a zero exit.
+- SIGINT grace expiry: an unfinished upload is cancelled and cleanup settles.
+- Repeated signals: unsettled disposal reaches the final unsuccessful exit bound.
+- POSIX FIFO readiness ownership: application close awaits a disconnected probe's
+  filesystem work; the harness requests close using SIGUSR2.
+
+All four run on Linux/macOS. The Windows gate must pass every other test; skips
+do not indicate failures or equivalent coverage of those POSIX mechanisms.
+
+Rejected-body tests preserve the specified transport alternatives: a sender that
+exceeds the 64 KiB discard allowance may receive the exact HTTP error or a
+connection reset before that response arrives. The oversized rejection case
+accepts only HTTP 415 with the expected JSON or `ECONNRESET`, still requires a
+bounded socket close without HTTP EOF, and checks released capacity, no parser
+call or retained upload, and a successful subsequent upload. Stream-level tests
+independently enforce the byte allowance.
+
 CI configures the same full gate on Ubuntu, macOS and Windows, using `npm.cmd`
 on Windows, then a Linux container job. Pinned action revisions, read-only workflow
 permissions and checkout with credential persistence disabled reduce supply-chain
