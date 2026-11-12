@@ -106,3 +106,14 @@ errors and stale storage references, then run the full gate and heavy resource
 checks. Commit actual evidence and merge locally only after required executable
 gates pass; qualify unavailable environments. Keep historical docs/specs/results,
 Git identity, release tag and commit timestamps intact. Push nothing.
+
+## Measurement refinement (2026-11-12)
+
+The service itself was updated in place; its existing startup and listener remain.
+Remove the initial resource-only application bootstrap to make that boundary
+explicit. Launch `node --import resource-monitor.ts dist/server.js` with the same
+normal compiled entrypoint. Discover its port from the existing `server_started`
+event and sample RSS through the preload's IPC messages. The preload imports no
+app/server factory and opens no network listeners; its timer and IPC channel are
+unreferenced. Assert the process entrypoint and retain bounded observation and
+termination. Recheck the normal server's pre-EOF parsing and actual lazy upload.

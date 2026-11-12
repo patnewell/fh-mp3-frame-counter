@@ -70,6 +70,17 @@ Earlier specifications and execution evidence remain historical.
    budget tests become forward-precedence and bounded-fallback tests. Strict APE
    descriptor checks and malformed suffix rejection remain.
 
+## Existing service boundary amendment (2026-11-12)
+
+**S15:** Update the existing `src/server.ts`/`src/app.ts`/upload route in place;
+do not introduce a replacement application or server entrypoint. Native resource
+measurement must launch the normal `dist/server.js`, asserting and recording
+that entrypoint. An optional measurement preload may sample process memory but
+must not create applications, network listeners, or references that keep shutdown alive.
+A compiled normal-entrypoint HTTP regression must prove parsing occurs while
+file and HTTP EOF remain unavailable. This clarifies S04/S13 without changing
+framing, metadata or HTTP compatibility.
+
 ## Acceptance scenarios and evidence
 
 Test every header split, one-byte/varied chunks, multiple frames per chunk,

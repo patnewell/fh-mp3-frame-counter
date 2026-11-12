@@ -16,6 +16,28 @@ const parserServer = new URL("../helpers/parser-server.ts", import.meta.url);
 const eventually = { timeout: 3000, interval: 20 };
 
 describe("compiled application from an unrelated directory with spaces", () => {
+  it("parses incoming bytes in the normal server entrypoint before file or HTTP EOF", async () => {
+    await withProcessSandbox(async (sandbox) => {
+      const service = await sandbox.server();
+      const upload = openProcessUpload(`${service.url}/file-upload`, uploadHeaders);
+      try {
+        upload.request.write(
+          `--${BOUNDARY}\r\nContent-Disposition: form-data; name="file"; filename="private.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n`,
+        );
+        upload.request.write(Buffer.from("49443305000000000000", "hex")); // Invalid ID3 version.
+        const response = await withinProcess(upload.response, 2000);
+        expect(response.status).toBe(400);
+        expect(JSON.parse(response.body)).toEqual({
+          error: "The file is not a complete supported MPEG-1 Layer III stream.",
+        });
+        expect(upload.request.writableEnded).toBe(false);
+        expect(await (await fetch(`${service.url}/health/live`)).json()).toEqual({ status: "ok" });
+      } finally {
+        upload.request.destroy();
+      }
+    });
+  });
+
   it("counts the unchanged assignment sample, serves exact probes without upload storage", async () => {
     await withProcessSandbox(async (sandbox) => {
       expect(sandbox.cwd).toContain(" ");

@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,6 +9,48 @@ import { describe, expect, it } from "vitest";
 const root = new URL("../../", import.meta.url);
 
 describe("repository guardrails", () => {
+  it("lets the memory preload exit without an application or referenced IPC handle", async () => {
+    const child = spawn(
+      process.execPath,
+      [
+        "--import",
+        new URL("scripts/resource-monitor.ts", root).href,
+        "--input-type=module",
+        "--eval",
+        "",
+      ],
+      { stdio: ["ignore", "ignore", "pipe", "ipc"], windowsHide: true },
+    );
+    let stderr = "";
+    child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (resolve, reject) => {
+        child.once("error", reject);
+        child.once("close", (code, signal) => resolve({ code, signal }));
+      },
+    );
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      const result = await Promise.race([
+        closed,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("The measurement preload kept Node alive.")),
+            2000,
+          );
+        }),
+      ]);
+      expect(result).toEqual({ code: 0, signal: null });
+      expect(stderr).toBe("");
+    } finally {
+      clearTimeout(timer);
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      await closed;
+    }
+  });
+
   it.each([
     ["independent parser", "export const parse = (word: number): number => word;", true],
     ["framework", 'export { default as dependency } from "fastify";', false],

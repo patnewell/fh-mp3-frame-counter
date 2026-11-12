@@ -108,10 +108,62 @@ async function message(
   }
 }
 
+/** Discover the port from the existing executable's normal startup event. */
+async function serverPort(child: ChildProcess): Promise<number> {
+  const { promise, resolve, reject } = Promise.withResolvers<number>();
+  let pending = "";
+  const receive = (chunk: string): void => {
+    pending += chunk;
+    if (pending.length > 16 * 1024) {
+      reject(new Error("Server startup output exceeded its observation bound."));
+      return;
+    }
+    let boundary = pending.indexOf("\n");
+    while (boundary !== -1) {
+      const line = pending.slice(0, boundary);
+      pending = pending.slice(boundary + 1);
+      try {
+        const value: unknown = JSON.parse(line);
+        if (record(value) && value.event === "server_started" && typeof value.port === "number") {
+          assert(Number.isInteger(value.port) && value.port > 0 && value.port <= 65_535);
+          resolve(value.port);
+        }
+      } catch (error) {
+        reject(error);
+      }
+      boundary = pending.indexOf("\n");
+    }
+  };
+  const exited = (): void => reject(new Error("The existing server exited before startup."));
+  const failed = (error: Error): void => reject(error);
+  const timer = setTimeout(
+    () => reject(new Error("Missing existing-server startup event.")),
+    10_000,
+  );
+  child.stdout?.setEncoding("utf8").on("data", receive);
+  child.once("exit", exited);
+  child.once("error", failed);
+  try {
+    return await promise;
+  } finally {
+    clearTimeout(timer);
+    child.stdout?.off("data", receive);
+    child.stdout?.resume();
+    child.off("exit", exited);
+    child.off("error", failed);
+  }
+}
+
 async function nativeCheck(): Promise<Record<string, unknown>> {
+  const entrypoint = fileURLToPath(new URL("../dist/server.js", import.meta.url));
   const child = spawn(
     process.execPath,
-    ["--max-old-space-size=128", fileURLToPath(new URL("./resource-server.ts", import.meta.url))],
+    [
+      "--max-old-space-size=128",
+      "--import",
+      new URL("./resource-monitor.ts", import.meta.url).href,
+      entrypoint,
+    ],
     {
       cwd: ROOT,
       env: {
@@ -122,7 +174,7 @@ async function nativeCheck(): Promise<Record<string, unknown>> {
         MAX_UPLOADS: "1",
         REQUEST_TIMEOUT_MS: String(DEADLINE_MS),
         SHUTDOWN_GRACE_MS: "500",
-        LOG_LEVEL: "silent",
+        LOG_LEVEL: "info",
       },
       stdio: ["ignore", "pipe", "pipe", "ipc"],
       windowsHide: true,
@@ -134,7 +186,6 @@ async function nativeCheck(): Promise<Record<string, unknown>> {
   child.stderr?.setEncoding("utf8").on("data", (text: string) => {
     diagnostic = `${diagnostic}${text}`.slice(-16 * 1024);
   });
-  child.stdout?.resume();
   child.on("message", (value: unknown) => {
     if (record(value) && value.event === "memory" && typeof value.peakRssBytes === "number") {
       peakRss = Math.max(peakRss, value.peakRssBytes);
@@ -143,17 +194,23 @@ async function nativeCheck(): Promise<Record<string, unknown>> {
   });
   const exited = new Promise<void>((resolve) => child.once("close", () => resolve()));
   try {
-    const ready = await message(child, (value) => value.event === "ready");
-    assert(typeof ready.port === "number" && ready.port > 0);
+    const port = await serverPort(child);
+    assert.equal(
+      child.spawnargs.at(-1),
+      fileURLToPath(new URL("../dist/server.js", import.meta.url)),
+      "Measure the existing server entrypoint, not a separate application bootstrap.",
+    );
     const baseline = await message(child, (value) => value.event === "memory");
-    const result = await upload(`http://127.0.0.1:${ready.port}`);
+    assert.equal(baseline.entrypoint, entrypoint);
+    const result = await upload(`http://127.0.0.1:${port}`);
     const measured = message(child, (value) => value.event === "memory" && value.final === true);
     child.send("measure");
-    await measured;
+    assert.equal((await measured).entrypoint, entrypoint);
     assert(samples > 0 && peakRss > 0, "Server RSS must be observed, not inferred from heap size.");
     assert(peakRss < MEMORY_BUDGET, `Server peak RSS ${peakRss} exceeded ${MEMORY_BUDGET}.`);
     return {
       ...result,
+      serverEntrypoint: entrypoint,
       serverBaselineRssBytes: baseline.rssBytes,
       serverPeakRssBytes: peakRss,
       serverRssCeilingBytes: MEMORY_BUDGET,

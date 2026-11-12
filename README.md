@@ -76,6 +76,11 @@ buffer. Success waits for valid file EOF, multipart completion and the complete
 HTTP body. Cancellation does not release capacity while stream/parser/rejection
 work remains unsettled.
 
+The existing startup remains `src/server.ts` → `src/app.ts` →
+`src/upload/route.ts`. The upload route calls the counter with the incoming
+multipart file stream directly. The resource check runs this same compiled
+server; it has no separate application bootstrap.
+
 Ordinary CBR/VBR uses each frame's header. Free-format commits the first
 compatible boundary within 128 KiB, with fixed search/run limits. Declared
 metadata bodies are skipped incrementally; an unknown footer-only suffix is

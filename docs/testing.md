@@ -128,8 +128,11 @@ usage alone is not accepted as total-memory evidence.
 
 `scripts/resource-check.ts` writes ignored `reports/resources-native.json` or
 `reports/resources-container.json`. The native command builds first and launches
-`scripts/resource-server.ts`, which reports server RSS and the OS high-water RSS
-over IPC. Client observations are separate. The Docker command builds its image
+the existing `dist/server.js` entrypoint. A measurement-only preload,
+`scripts/resource-monitor.ts`, reports server RSS and the OS high-water RSS over
+IPC; it creates no application or network listener and cannot keep shutdown alive.
+The check asserts and records the actual server entrypoint. Client observations
+are separate. The Docker command builds its image
 and needs no host dependency installation. Both measured server variants use a
 128 MiB old-space limit; the container additionally enforces 256 MiB total memory
 with swap disabled.

@@ -11,3 +11,7 @@
 ## Review and completion
 
 - [x] [T03] Apply `review-change` to the complete feature diff from `2c91eba`; resolve findings, scan for stale storage assumptions and accidental buffering, run `npm.cmd run verify` on pinned Node, execute the isolated resource check and attempt both Docker checks. Record actual revision/results, compatibility/test replacements, review dispositions and blocked environments in `verification.md`, commit evidence, run the clean final gate and merge the verified feature locally. Preserve existing history/tags and push nothing.
+
+## Existing service clarification
+
+- [x] [T04] Remove `scripts/resource-server.ts`; make `scripts/resource-check.ts` launch the existing `dist/server.js` with a measurement-only preload in `scripts/resource-monitor.ts`. Assert/report the actual entrypoint, add a normal-entrypoint pre-EOF HTTP regression, update current documentation and record actual review/gate/resource results without rewriting earlier evidence.

@@ -164,3 +164,45 @@ full platform matrix and separate native/container resource checks; no hosted
 execution or protection policy is claimed. `v1.0.0` remains at annotated tag
 object `78fdfc6c9aaf2bbace03c44ad0c7096ae41238d9`. No push or timestamp rewrite
 was performed. Local merge follows this verified evidence commit.
+
+## Existing entrypoint follow-up (2026-11-12)
+
+Base: `bf3813a350b36921cf870a84e32861cbdaa175e1` plus the reviewed working-tree
+correction. Inspection against pre-005 `2c91eba` confirms that production was
+updated in place: `src/server.ts` retains its original startup/listener and only
+two shutdown comments changed; the existing upload route replaced file creation/
+write/disposal with `count(part.file, signal)`. Normal start/dev/Docker commands
+still use that original server. No additional production application was needed.
+
+The separate `scripts/resource-server.ts` measurement bootstrap made that less
+clear, so this correction removes it. A new entrypoint assertion failed against
+that bootstrap before the change. Native measurement now launches the normal
+`dist/server.js` directly, reads its existing startup event for the port, and
+uses a measurement-only preload with no app factory or network listener. The
+preload's timer and IPC channel are unreferenced; a child-process regression
+proves loading it alone exits zero without keeping Node alive.
+
+A new real-HTTP regression launches the normal compiled server and receives
+400 for an invalid ID3 descriptor while the file and HTTP upload remain open.
+This demonstrates actual parsing before EOF through the production entrypoint.
+The sample, all fixture oracles and settled-work regressions remain unchanged.
+
+`npm.cmd run verify` passed on native Windows x64 / Node 24.22.3:
+**340 passed, zero failed, three expected POSIX skips**, across 20 files.
+Lint, strict typecheck, clean build and existing coverage gates passed; coverage
+remains 95.52% statements, 93.55% branches, 97.70% functions and 97.54% lines.
+
+`npm.cmd run test:resources` also passed using the actual `dist/server.js`:
+536,871,536 lazy file bytes returned exactly 1,284,528 frames; liveness remained
+healthy. The report explicitly asserts/records the launched entrypoint. Server
+baseline RSS was 77,799,424 bytes and OS peak RSS **93,061,120 bytes (88.75 MiB)**,
+with 56 observations, against the 256 MiB ceiling. Separate client peak RSS was
+75,657,216 bytes. Actual execution: 2026-11-12 23:55:07.980–23:55:09.774 UTC.
+These are new observations of the normal executable, not a performance comparison
+with the earlier bootstrap. Earlier results remain historical.
+
+Independent `review-change` review found no remaining issues in startup parsing,
+entrypoint assertions, monitoring lifetime, bounded observations, documentation or
+the two added regressions. Production application/parser code and gates were not
+changed by this measurement correction. Docker and other platform qualifications
+above remain; no container execution or push is claimed.

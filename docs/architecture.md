@@ -14,6 +14,12 @@ input before publishing the count. A provisional count never permits early
 success. App construction and process startup remain separate; mutable state
 belongs to an application or request.
 
+The service continues to start through `src/server.ts` (`dist/server.js` after
+compilation), using the existing app factory and upload route. That route passes
+`part.file` directly to the counter. The resource check launches this same
+entrypoint; its optional memory-monitor preload does not construct an app or
+open a network listener.
+
 | File                      | Responsibility                                                               |
 | ------------------------- | ---------------------------------------------------------------------------- |
 | `src/app.ts`              | Construct Fastify, application admission, health routes and close barrier    |
