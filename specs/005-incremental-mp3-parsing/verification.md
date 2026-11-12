@@ -95,4 +95,72 @@ native Linux/macOS and production load remain unexecuted.
 
 ### Final review and clean revision
 
-Pending complete-diff review and final clean-revision checks.
+Independent agents applied `review-change` to the complete feature diff from
+`2c91eba`, with separate review of parser invariants, transport/runtime ownership,
+resource checks and current documentation. Findings and disposition:
+
+1. **Metadata mode and retained chunks.** The mixed-terminal-envelope regression
+   exposed audio-shaped bytes inside an undeclared APE body. Metadata mode now
+   remains locked; tiny prefixes and saved descriptors own copies before later
+   pulls. Raw resumed audio still rejects. Reused-producer-buffer regressions pass.
+2. **Fallback CPU/search ownership.** Fallback validation yields every 128
+   descriptor transitions. Permanent tests exercise the actual 4096-alternative
+   ceiling inside a 65,409-byte suffix and cancellation scheduled only at EOF.
+3. **Bounded resource-client observations.** Review found an unbounded drain wait
+   after a clean early connection close and an unbounded child-close observation.
+   The upload shares its absolute deadline with each drain wait; child termination
+   has a five-second final observation bound. The clean native resource run below
+   passes after these corrections.
+4. **Preserved independent healthcheck coverage.** Removing filesystem readiness
+   had also removed the completed HTTP 503/silent exit-one case. A dedicated
+   compiled-process regression restores that unrelated guarantee in `bd8ca26`.
+5. **Real malformed-part probes.** Independent isolated compiled HTTP probes of
+   truncated second files, truncated second fields and an empty second file all
+   returned 413, preserved liveness and omitted private markers. Existing permanent
+   real-wire malformed-part cases remain passing; the historical dependency
+   qualification is not claimed resolved for every possible event ordering.
+
+No review findings remain. No fixtures, dependencies, vendored skills, historical
+001–004 specifications/evidence, coverage thresholds or exclusions changed.
+The intentional gate change strengthens parser filesystem independence and is
+checked by the actual Biome harness. Agent review is not human approval.
+
+On clean **`bd8ca2621928eff2cd3ac3728537ad6d3d1adb47`**, native Windows x64 /
+Node 24.22.3, `npm.cmd run verify` passed lint, strict typecheck, clean compilation
+and **338 passed, zero failed, three expected POSIX skips**, across 20 files.
+Coverage: **95.52% statements** (577/604), **93.55% branches** (392/419),
+**97.70% functions** (85/87), **97.54% lines** (517/530). All mandatory fixture
+hashes/results and the exact sample response remain passing. The final evidence
+commit only records these results and completes the checklist; it changes no
+application or test behavior.
+
+The clean native resource run was on
+**`01d4d664b25e3325ac727dbba288b01fc1b5e038`**, with
+`workingTreeDirty: false`. Production source, resource scripts, Dockerfile and
+package.json are byte-identical between that revision and `bd8ca26`.
+`npm.cmd run test:resources` succeeded at **2026-11-12
+22:29:01.386–22:29:03.028 UTC** (17:29 EST):
+
+| Observation                       | Actual result                                        |
+| --------------------------------- | ---------------------------------------------------- |
+| Lazily generated file bytes       | 536,871,536 (>512 MiB)                               |
+| Independent count                 | 61,168 repetitions × 21 = 1,284,528 frames           |
+| Actual response                   | Exactly `{"frameCount":1284528}`; liveness still 200 |
+| Server baseline RSS               | 83,742,720 bytes                                     |
+| Server OS peak RSS                | **101,130,240 bytes (about 96.4 MiB)**               |
+| Server RSS ceiling / observations | 268,435,456 bytes (256 MiB) / 51 samples             |
+| Separate client OS peak RSS       | 85,024,768 bytes                                     |
+
+The ignored `reports/resources-native.json` records the real revision, times,
+server/client observations and limits. This is a tested resource envelope, not a
+claim of production throughput, universal RSS bounds or measured savings versus
+the original staging implementation.
+
+Both Docker commands were attempted again on clean `01d4d66` and stopped at
+`spawn docker ENOENT`; `reports/resources-container.json` says `unavailable`,
+not passed. Container memory enforcement, read-only mount-free execution and
+Linux/macOS POSIX shutdown remain unexecuted here. CI is configured to run the
+full platform matrix and separate native/container resource checks; no hosted
+execution or protection policy is claimed. `v1.0.0` remains at annotated tag
+object `78fdfc6c9aaf2bbace03c44ad0c7096ae41238d9`. No push or timestamp rewrite
+was performed. Local merge follows this verified evidence commit.

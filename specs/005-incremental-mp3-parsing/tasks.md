@@ -10,4 +10,4 @@
 
 ## Review and completion
 
-- [ ] [T03] Apply `review-change` to the complete feature diff from `2c91eba`; resolve findings, scan for stale storage assumptions and accidental buffering, run `npm.cmd run verify` on pinned Node, execute the isolated resource check and attempt both Docker checks. Record actual revision/results, compatibility/test replacements, review dispositions and blocked environments in `verification.md`, commit evidence, run the clean final gate and merge the verified feature locally. Preserve existing history/tags and push nothing.
+- [x] [T03] Apply `review-change` to the complete feature diff from `2c91eba`; resolve findings, scan for stale storage assumptions and accidental buffering, run `npm.cmd run verify` on pinned Node, execute the isolated resource check and attempt both Docker checks. Record actual revision/results, compatibility/test replacements, review dispositions and blocked environments in `verification.md`, commit evidence, run the clean final gate and merge the verified feature locally. Preserve existing history/tags and push nothing.
