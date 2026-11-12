@@ -1,7 +1,5 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { type ClientRequest, request as httpRequest, type IncomingHttpHeaders } from "node:http";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { type AppOptions, createApp } from "../../src/app.ts";
 import type { UploadOperations } from "../../src/upload/route.ts";
@@ -23,7 +21,6 @@ export interface UploadExchange {
 interface RunningUploadApp {
   readonly app: FastifyInstance;
   readonly admission: ReturnType<typeof createApp>["admission"];
-  readonly directory: string;
   open(headers?: Record<string, string>): UploadExchange;
 }
 
@@ -64,34 +61,25 @@ export function audioBytes(): Promise<Buffer> {
   return readFile(new URL("../fixtures/cbr-stereo-44100.mp3", import.meta.url));
 }
 
-/** Own sockets and the temporary parent even when an assertion or the app fails. */
+/** Own sockets and the listening app even when an assertion or the app fails. */
 export async function withUploadApp(
   options: AppOptions,
   operations: Partial<UploadOperations>,
   inspect: (service: RunningUploadApp) => Promise<void>,
 ): Promise<void> {
-  const directory = await mkdtemp(join(tmpdir(), "mp3-lifecycle-"));
+  const { app, admission } = createApp({ timeoutMs: 5000, ...options }, operations);
+  const clients = new Set<ClientRequest>();
   try {
-    const { app, admission } = createApp(
-      { timeoutMs: 5000, ...options, tempDirectory: directory },
-      operations,
-    );
-    const clients = new Set<ClientRequest>();
-    try {
-      const url = await app.listen({ host: "127.0.0.1", port: 0 });
-      await inspect({
-        app,
-        admission,
-        directory,
-        open: (headers) => openUpload(url, clients, headers),
-      });
-    } finally {
-      for (const client of clients) client.destroy();
-      app.server.closeAllConnections();
-      await within(app.close());
-    }
+    const url = await app.listen({ host: "127.0.0.1", port: 0 });
+    await inspect({
+      app,
+      admission,
+      open: (headers) => openUpload(url, clients, headers),
+    });
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    for (const client of clients) client.destroy();
+    app.server.closeAllConnections();
+    await within(app.close());
   }
 }
 

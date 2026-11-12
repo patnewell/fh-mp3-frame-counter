@@ -8,7 +8,7 @@ the owning capability. Load only documentation relevant to the change.
 
 | Change                          | Owner                                                                    | Evidence                                            |
 | ------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------- |
-| MPEG framing and metadata       | `src/mp3/`                                                               | Parser unit tests and real fixtures                 |
+| MPEG framing and metadata       | `src/mp3/`                                                               | Stream/chunk tests and real fixture identities      |
 | Multipart and request resources | `src/upload/`, `src/app.ts`                                              | Real HTTP and ownership/cancellation tests          |
 | Runtime, probes and shutdown    | `src/config.ts`, `src/logging.ts`, `src/server.ts`, `src/healthcheck.ts` | Compiled process and container tests                |
 | Agent/build policy              | `biome.json`, `.agents/`, `.codex/`, `.github/`                          | Executable harness tests and a complete diff review |
@@ -46,6 +46,8 @@ Use separate worktrees for concurrent features; each has its own feature pointer
 ## Invariants
 
 - Keep parser code independent of transport, configuration and upload policy.
+- Count directly from the file stream; no upload staging or complete-file buffer.
+- Bound retained parser state and yield during long loops; preserve backpressure.
 - Derive fixture expectations independently; preserve the supplied sample bytes.
 - Keep mutable state request/app-owned and retain capacity until work settles.
 - Bound memory, work, bytes and elapsed time; explain ingress responsibilities.

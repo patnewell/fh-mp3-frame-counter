@@ -1,0 +1,13 @@
+# 005 · Implementation tasks
+
+## Domain increment
+
+- [x] [T01] Add failing async-input/chunk/progress regressions in `tests/unit/mp3/` and adapt `tests/helpers/mp3.ts`; implement the bounded forward parser in `src/mp3/`, retaining mandatory fixture evidence in `tests/integration/fixtures.test.ts`. Replace obsolete seek tests with stream carry/backpressure/cancellation tests and explicitly migrated ambiguity expectations. Run focused parser checks and commit this usable increment before T02.
+
+## Streaming service increment
+
+- [x] [T02] Pass the actual file stream to the parser and retain settled stream/parser/rejection ownership in `src/upload/route.ts` and `src/upload/lifetime.ts`; remove storage from `src/app.ts`, `src/config.ts`, `src/logging.ts`, HTTP/process helpers and obsolete fixtures. Adapt/add real HTTP, lifecycle, readiness, config, privacy and compiled shutdown regressions throughout `tests/`. Within this increment, implement independent `scripts/`/Docker/resource checks and update affected current `README.md`, `docs/`, `AGENTS.md`, `SKILLS.md`, `.github/`, `.env.example` and `specs/README.md`. Run focused domain/HTTP/runtime checks and commit cohesive source/test and deployment/documentation changes before T03.
+
+## Review and completion
+
+- [x] [T03] Apply `review-change` to the complete feature diff from `2c91eba`; resolve findings, scan for stale storage assumptions and accidental buffering, run `npm.cmd run verify` on pinned Node, execute the isolated resource check and attempt both Docker checks. Record actual revision/results, compatibility/test replacements, review dispositions and blocked environments in `verification.md`, commit evidence, run the clean final gate and merge the verified feature locally. Preserve existing history/tags and push nothing.

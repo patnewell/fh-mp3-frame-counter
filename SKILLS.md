@@ -18,7 +18,7 @@ Invoke these in the Codex sidebar or CLI conversation. For a new feature, provid
 the directory explicitly, for example:
 
 ```text
-$speckit-specify Use feature directory specs/005-descriptive-change.
+$speckit-specify Use feature directory specs/006-descriptive-change.
 Describe the desired behavior, compatibility and observable acceptance here.
 ```
 
@@ -29,3 +29,9 @@ one active feature; it is not a registry of all features. See [the delivery map]
 One verified feature merge precedes the next feature specification. Small fixes
 can amend their owning feature; substantial changes receive a new cycle. Review
 skills complement executable checks and independent human review.
+
+The active 005 cycle implements incremental parsing with bounded forward-only
+compatibility; use its [specification](specs/005-incremental-mp3-parsing/spec.md)
+when changing current parser/transport behavior. Earlier storage/seek requirements
+remain historical where 005 explicitly supersedes them. Select a new directory
+for the next capability after the current cycle is verified and merged.

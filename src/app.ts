@@ -1,6 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import Fastify, { type FastifyBaseLogger, type FastifyInstance, LogController } from "fastify";
 import { type AppOptions, resolveAppSettings } from "./config.ts";
 import { logEvent, loggingOptions, requestRoute } from "./logging.ts";
@@ -21,14 +19,6 @@ export function createApp(
 ): Application {
   const settings = resolveAppSettings(options);
   const admission = new UploadAdmission(settings.maxUploads);
-  let storageProbe: Promise<void> | undefined;
-  const checkStorage = (): Promise<void> => {
-    // Share only in-flight work; the next completed readiness check probes storage again.
-    storageProbe ??= probeStorage(settings.tempDirectory).finally(() => {
-      storageProbe = undefined;
-    });
-    return storageProbe;
-  };
   let rootLogger: FastifyBaseLogger | undefined;
   const app = Fastify({
     logger: loggingOptions(settings.logLevel, () => rootLogger),
@@ -53,14 +43,8 @@ export function createApp(
       elapsedMs: Math.max(0, Math.round(reply.elapsedTime)),
     });
   });
-  app.addHook("onReady", checkStorage);
   app.addHook("preClose", async () => admission.stop());
-  app.addHook("onClose", async () => {
-    // A disconnected readiness client does not cancel its in-flight filesystem work.
-    const probe = storageProbe;
-    await admission.drained();
-    await probe;
-  });
+  app.addHook("onClose", async () => admission.drained());
   app.addHook("onSend", async (_request, reply, payload) => {
     if (!admission.accepting) reply.header("connection", "close");
     return payload;
@@ -68,12 +52,7 @@ export function createApp(
   app.get("/health/live", async () => ({ status: "ok" }));
   app.get("/health/ready", async (_request, reply) => {
     if (admission.accepting) {
-      try {
-        await checkStorage();
-        if (admission.accepting) return { status: "ready" };
-      } catch {
-        // Report dependency availability without exposing filesystem details.
-      }
+      return { status: "ready" };
     }
     reply.code(503);
     return { status: "not-ready" };
@@ -81,13 +60,4 @@ export function createApp(
   // Encapsulation keeps upload error policy local to this endpoint.
   app.register(async (scope) => registerUploadRoute(scope, settings, admission, operations));
   return { app, admission };
-}
-
-async function probeStorage(parent: string): Promise<void> {
-  const directory = await mkdtemp(join(parent, "probe-"));
-  try {
-    await writeFile(join(directory, "ready"), "ready", { flag: "wx", mode: 0o600 });
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
 }

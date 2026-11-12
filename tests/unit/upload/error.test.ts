@@ -68,7 +68,4 @@ describe("application options", () => {
       expect(() => createApp({ maxFileBytes })).toThrow(RangeError);
     },
   );
-  it.each(["relative", "/bad\0path"])("rejects invalid temporary parent %s", (tempDirectory) => {
-    expect(() => createApp({ tempDirectory })).toThrow();
-  });
 });

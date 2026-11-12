@@ -1,104 +1,60 @@
-import { open } from "node:fs/promises";
 import { InvalidMp3Error } from "./error.ts";
-import { type CandidateScan, candidateScan, FramingBudget, nextFreeLength } from "./free-format.ts";
-import { readHeader } from "./header.ts";
-import { FileReader } from "./reader.ts";
-import { isTagSuffix, MetadataBudget, skipLeadingTags } from "./tags.ts";
+import { InferenceBudget, inferFreeLength } from "./free-format.ts";
+import { type FrameHeader, readHeader } from "./header.ts";
+import { StreamReader } from "./reader.ts";
+import { readTag } from "./tags.ts";
 
-interface FreeLength {
-  readonly bytes: number;
-  readonly sampleRateHz: number;
-}
-
-/** Save the count before scan.origin's frame; scan.cursor advances beyond each selected boundary. */
-interface Checkpoint {
-  readonly scan: CandidateScan;
-  readonly count: number;
-}
-
-/** Count physical frames in a completed, unchanged file; own and close its descriptor. */
-export async function countFrames(path: string, signal?: AbortSignal): Promise<number> {
+/** Consume a byte stream with bounded retained state; a successful count requires valid EOF. */
+export async function countFrames(
+  source: AsyncIterable<Uint8Array>,
+  signal?: AbortSignal,
+): Promise<number> {
   signal?.throwIfAborted();
-  const file = await open(path, "r");
+  const input = new StreamReader(source, signal);
+  let count = 0;
+  let terminal = false;
+  let pendingHeader: FrameHeader | undefined;
+  let freeLength: { bytes: number; sampleRateHz: number } | undefined;
+  const budget = new InferenceBudget();
   try {
-    const input = new FileReader(file, (await file.stat()).size, signal);
-    let offset = await skipLeadingTags(input);
-    let count = 0;
-    let freeLength: FreeLength | undefined;
-    // Choices stay provisional until the remaining audio and terminal metadata validate.
-    const checkpoints: Checkpoint[] = [];
-    const budget = new FramingBudget(input.size);
-    const metadataBudget = new MetadataBudget();
-    while (offset < input.size) {
-      try {
-        const header = readHeader(await input.read(offset, 4));
-        if (!header) {
-          if (await isTagSuffix(input, offset, metadataBudget)) break;
-          throw new InvalidMp3Error(`Invalid or unsupported MPEG frame at byte ${offset}.`);
+    while (true) {
+      let header = pendingHeader;
+      pendingHeader = undefined;
+      if (!header) {
+        let bytes = await input.read(4);
+        if (bytes.length === 0) break;
+        header = readHeader(bytes);
+        if (!header || terminal) {
+          // After a terminal envelope, header-shaped bytes may be an undeclared APE body,
+          // but they can never resume audio counting. The bounded suffix validator decides.
+          bytes = Buffer.from(bytes); // Metadata may outlive the producer chunk that held its prefix.
+          if ((await readTag(input, bytes, count > 0)) === "eof") break;
+          if (count > 0) terminal = true;
+          continue;
         }
-        let length: number;
-        if (header.kind === "indexed") {
-          freeLength = undefined;
-          length = header.frameBytes;
-        } else {
-          if (freeLength?.sampleRateHz !== header.sampleRateHz) {
-            const scan = candidateScan(offset, header);
-            const bytes = await nextFreeLength(input, scan, budget);
-            if (bytes === undefined)
-              throw new InvalidMp3Error("Cannot infer the free-format frame length.");
-            checkpoints.push({ scan, count });
-            freeLength = { bytes, sampleRateHz: header.sampleRateHz };
-          }
-          length = freeLength.bytes + header.padding;
-        }
-        if (length < header.minimumBytes || offset + length > input.size) {
-          throw new InvalidMp3Error(`Incomplete MPEG frame at byte ${offset}.`);
-        }
-        budget.visit(length);
-        offset += length;
-        count++;
-      } catch (error) {
-        if (!(error instanceof InvalidMp3Error) || budget.exhausted || metadataBudget.exhausted) {
-          throw error;
-        }
-        // An attractive early header can be payload. Retry until the entire layout validates.
-        const alternative = await retryCheckpoint(input, checkpoints, budget);
-        if (!alternative) throw error;
-        offset = alternative.offset;
-        count = alternative.count;
-        freeLength = alternative.length;
       }
+      let length: number;
+      if (header.kind === "indexed") {
+        freeLength = undefined;
+        length = header.frameBytes;
+      } else if (freeLength?.sampleRateHz === header.sampleRateHz) {
+        length = freeLength.bytes + header.padding;
+      } else {
+        const inferred = await inferFreeLength(input, header, budget);
+        freeLength = { bytes: inferred.bytes, sampleRateHz: header.sampleRateHz };
+        pendingHeader = inferred.next;
+        count++;
+        continue;
+      }
+      if (length < header.minimumBytes)
+        throw new InvalidMp3Error("Frame length is below its overhead.");
+      await input.skip(length - 4);
+      count++;
     }
     signal?.throwIfAborted();
     if (count === 0) throw new InvalidMp3Error("No MPEG audio frames were found.");
     return count;
   } finally {
-    await file.close();
+    await input.close();
   }
-}
-
-/**
- * Retry the newest choice first, popping only exhausted scans. Restore its pre-frame count/origin,
- * but keep its advanced cursor so the rejected boundary is not selected again. File-owned budgets
- * retain all charges from failed layouts; only traversal state rolls back.
- */
-async function retryCheckpoint(
-  input: FileReader,
-  checkpoints: Checkpoint[],
-  budget: FramingBudget,
-): Promise<{ offset: number; count: number; length: FreeLength } | undefined> {
-  while (checkpoints.length > 0) {
-    const checkpoint = checkpoints.at(-1);
-    if (!checkpoint) return undefined;
-    const bytes = await nextFreeLength(input, checkpoint.scan, budget);
-    if (bytes !== undefined) {
-      return {
-        offset: checkpoint.scan.origin,
-        count: checkpoint.count,
-        length: { bytes, sampleRateHz: checkpoint.scan.first.sampleRateHz },
-      };
-    }
-    checkpoints.pop();
-  }
-  return undefined;
 }

@@ -1,5 +1,3 @@
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readConfig, resolveAppSettings } from "../../src/config.ts";
 
@@ -12,14 +10,12 @@ describe("runtime configuration", () => {
       maxUploads: 4,
       timeoutMs: 30_000,
       shutdownGraceMs: 10_000,
-      tempDirectory: tmpdir(),
       logLevel: "info",
     });
     expect(resolveAppSettings().logLevel).toBe("silent");
   });
 
   it("resolves every supported value and permits an ephemeral server port", () => {
-    const tempDirectory = join(tmpdir(), "configured uploads");
     expect(
       readConfig({
         HOST: "::",
@@ -28,7 +24,6 @@ describe("runtime configuration", () => {
         MAX_UPLOADS: "2",
         REQUEST_TIMEOUT_MS: "1500",
         SHUTDOWN_GRACE_MS: "250",
-        UPLOAD_TEMP_DIR: tempDirectory,
         LOG_LEVEL: "trace",
       }),
     ).toEqual({
@@ -38,7 +33,6 @@ describe("runtime configuration", () => {
       maxUploads: 2,
       timeoutMs: 1500,
       shutdownGraceMs: 250,
-      tempDirectory,
       logLevel: "trace",
     });
   });
@@ -75,15 +69,6 @@ describe("runtime configuration", () => {
   it.each(["", "  ", "localhost\0private"])("rejects an unusable HOST %j", (HOST) => {
     expect(() => readConfig({ HOST })).toThrow("HOST must be nonblank and contain no NUL bytes.");
   });
-
-  it.each(["", "relative", "private\0path"])(
-    "rejects an unsafe temporary parent %j",
-    (UPLOAD_TEMP_DIR) => {
-      expect(() => readConfig({ UPLOAD_TEMP_DIR })).toThrow(
-        "UPLOAD_TEMP_DIR must be an absolute directory path without NUL bytes.",
-      );
-    },
-  );
 
   it.each(["fatal", "error", "warn", "info", "debug", "trace", "silent"])(
     "accepts log level %s",

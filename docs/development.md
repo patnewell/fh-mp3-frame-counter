@@ -21,20 +21,23 @@ Windows and WSL.
 Use `cd mp3-frame-counter` on Linux/Unix or macOS, or
 `Set-Location mp3-frame-counter` in PowerShell when starting from the parent directory.
 
-| Action            | Linux/Unix                        | macOS                             | Windows PowerShell                        |
-| ----------------- | --------------------------------- | --------------------------------- | ----------------------------------------- |
-| Locked install    | `npm ci --ignore-scripts`         | `npm ci --ignore-scripts`         | `npm.cmd ci --ignore-scripts`             |
-| Full gate         | `npm run verify`                  | `npm run verify`                  | `npm.cmd run verify`                      |
-| All tests         | `npm test`                        | `npm test`                        | `npm.cmd test`                            |
-| Unit tests        | `npm run test:unit`               | `npm run test:unit`               | `npm.cmd run test:unit`                   |
-| Integration tests | `npm run test:integration`        | `npm run test:integration`        | `npm.cmd run test:integration`            |
-| Coverage          | `npm run test:coverage`           | `npm run test:coverage`           | `npm.cmd run test:coverage`               |
-| Typecheck         | `npm run typecheck`               | `npm run typecheck`               | `npm.cmd run typecheck`                   |
-| Lint / format     | `npm run lint` / `npm run format` | `npm run lint` / `npm run format` | `npm.cmd run lint` / `npm.cmd run format` |
-| Compile           | `npm run build`                   | `npm run build`                   | `npm.cmd run build`                       |
-| Run compiled app  | `npm start`                       | `npm start`                       | `npm.cmd start`                           |
-| Watch source      | `npm run dev`                     | `npm run dev`                     | `npm.cmd run dev`                         |
-| Fixture identity  | `npm run fixtures:verify`         | `npm run fixtures:verify`         | `npm.cmd run fixtures:verify`             |
+| Action              | Linux/Unix                         | macOS                              | Windows PowerShell                        |
+| ------------------- | ---------------------------------- | ---------------------------------- | ----------------------------------------- |
+| Locked install      | `npm ci --ignore-scripts`          | `npm ci --ignore-scripts`          | `npm.cmd ci --ignore-scripts`             |
+| Full gate           | `npm run verify`                   | `npm run verify`                   | `npm.cmd run verify`                      |
+| All tests           | `npm test`                         | `npm test`                         | `npm.cmd test`                            |
+| Unit tests          | `npm run test:unit`                | `npm run test:unit`                | `npm.cmd run test:unit`                   |
+| Integration tests   | `npm run test:integration`         | `npm run test:integration`         | `npm.cmd run test:integration`            |
+| Coverage            | `npm run test:coverage`            | `npm run test:coverage`            | `npm.cmd run test:coverage`               |
+| Typecheck           | `npm run typecheck`                | `npm run typecheck`                | `npm.cmd run typecheck`                   |
+| Lint / format       | `npm run lint` / `npm run format`  | `npm run lint` / `npm run format`  | `npm.cmd run lint` / `npm.cmd run format` |
+| Compile             | `npm run build`                    | `npm run build`                    | `npm.cmd run build`                       |
+| Run compiled app    | `npm start`                        | `npm start`                        | `npm.cmd start`                           |
+| Watch source        | `npm run dev`                      | `npm run dev`                      | `npm.cmd run dev`                         |
+| Fixture identity    | `npm run fixtures:verify`          | `npm run fixtures:verify`          | `npm.cmd run fixtures:verify`             |
+| Process resources   | `npm run test:resources`           | `npm run test:resources`           | `npm.cmd run test:resources`              |
+| Container smoke     | `npm run test:container`           | `npm run test:container`           | `npm.cmd run test:container`              |
+| Container resources | `npm run test:resources:container` | `npm run test:resources:container` | `npm.cmd run test:resources:container`    |
 
 Stop on a failed command. All-test, integration and coverage commands build first;
 unit tests run source directly. Native Node type stripping does not replace the
@@ -79,10 +82,10 @@ identity placeholders with your own values; settings affect this checkout only:
 git config --local user.name "YOUR_NAME"
 git config --local user.email "YOUR_EMAIL"
 git status --short
-git switch -c feature/005-descriptive-change
+git switch -c feature/006-descriptive-change
 ```
 
-In Codex, invoke `$speckit-specify` with an explicit `specs/005-descriptive-change`
+In Codex, invoke `$speckit-specify` with an explicit `specs/006-descriptive-change`
 directory and observable requirements. Review its result, then invoke
 `$speckit-plan` and `$speckit-tasks` separately. Commit each artifact before using
 `$speckit-implement`. Keep implementation commits cohesive and include tests and
@@ -133,11 +136,9 @@ After Ctrl+C, use `Remove-Item Env:PORT, Env:LOG_LEVEL`.
 | Inspect probe exit code              | `echo $?`                                           | `echo $?`                                           | `$LASTEXITCODE`                                         |
 
 Run the exit-code command immediately after the probe. The probe deliberately
-prints nothing. If overriding temporary storage, first create an absolute directory
-that the process owns: use `mkdir -p /absolute/path/mp3-temp` on Linux/Unix/macOS,
-or `New-Item -ItemType Directory -Force 'C:\\absolute\\path\\mp3-temp'` in PowerShell.
-Set `UPLOAD_TEMP_DIR` using the environment syntax above. See
-[operations](operations.md) for all values and resource constraints.
+prints nothing. Readiness reflects accepting work; there is no storage probe or
+upload directory setting. See [operations](operations.md) for configuration and
+resource constraints.
 
 ## Run the Linux container
 
@@ -159,7 +160,7 @@ platform-specific continuation characters. Stop any local server on port 3000.
 
 ```sh
 docker build --tag mp3-frame-counter .
-docker run --detach --name mp3-frame-counter --read-only --init --cap-drop ALL --security-opt no-new-privileges --cpus 1 --memory 1g --pids-limit 128 --tmpfs /tmp:rw,noexec,nosuid,size=512m,mode=1777 --stop-timeout 15 --publish 127.0.0.1:3000:3000 mp3-frame-counter
+docker run --detach --name mp3-frame-counter --read-only --init --cap-drop ALL --security-opt no-new-privileges --cpus 1 --memory 1g --pids-limit 128 --stop-timeout 15 --publish 127.0.0.1:3000:3000 mp3-frame-counter
 docker inspect --format '{{.State.Health.Status}}' mp3-frame-counter
 docker logs mp3-frame-counter
 ```
@@ -178,6 +179,13 @@ Expect exit code zero for a clean idle stop. `docker stop` tests Linux SIGTERM
 behavior even when the host is macOS/Windows. Image settings alone do not apply
 the resource restrictions in the launch command.
 
+The root remains read-only with no writable upload mount or upload tmpfs.
+`test:resources` runs a separate lazy large-upload check against an isolated
+server process; `test:resources:container` applies a constrained 256 MiB Linux
+container budget. Use the platform commands above and read the
+[resource-check details](testing.md#large-input-resource-checks) and
+[actual evidence](../specs/005-incremental-mp3-parsing/verification.md).
+
 ## Team use and human ownership
 
 Keep a feature small enough for one engineer to explain its contract, main code
@@ -188,9 +196,9 @@ implementation's tests might share. The PR template asks for an accountable owne
 linked acceptance and actual evidence; an agent's self-review is not human approval.
 
 A plausible next cycle might add a content digest to a separately specified
-response, extend framing to another MPEG version, or replace temporary staging
-with streaming. Choose one. Keep a compatibility regression, specify resource
-and error behavior, and load only the relevant parser/upload/operations guides.
+response or extend framing to another MPEG version. Choose one. Keep a
+compatibility regression, specify resource and error behavior, and load only the
+relevant parser/upload/operations guides.
 A durable job queue or transcription workflow requires a deliberate domain
 decision; see [architecture](architecture.md#future-changes).
 

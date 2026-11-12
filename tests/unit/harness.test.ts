@@ -12,6 +12,7 @@ describe("repository guardrails", () => {
   it.each([
     ["independent parser", "export const parse = (word: number): number => word;", true],
     ["framework", 'export { default as dependency } from "fastify";', false],
+    ["filesystem", 'export { readFile as dependency } from "node:fs/promises";', false],
     ["upload policy", 'export { value } from "../upload/admission.ts";', false],
     ["application", 'export { value } from "../app.js";', false],
     ["configuration", 'export { value } from "../config.ts";', false],

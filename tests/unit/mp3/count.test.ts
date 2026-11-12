@@ -1,10 +1,9 @@
-import { rm } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { countFrames } from "../../../src/mp3/count.ts";
 import { InvalidMp3Error } from "../../../src/mp3/error.ts";
-import { frame, id3, id3v1, withMp3 } from "../../helpers/mp3.ts";
+import { chunkBytes, frame, id3, id3v1 } from "../../helpers/mp3.ts";
 
-const count = (bytes: Uint8Array) => withMp3(bytes, countFrames);
+const count = (bytes: Uint8Array) => countFrames(chunkBytes(bytes));
 
 describe("physical frame count", () => {
   it("counts complete frames using each header's rate, padding and bitrate", async () => {
@@ -71,15 +70,52 @@ describe("physical frame count", () => {
     await expect(count(Buffer.concat([tag, frame()]))).rejects.toThrow(/footer/);
   });
 
-  it("propagates cancellation before opening a path", async () => {
+  it("propagates cancellation before the first source pull", async () => {
     const reason = new Error("Cancelled");
-    await expect(countFrames("missing.mp3", AbortSignal.abort(reason))).rejects.toBe(reason);
+    let pulls = 0;
+    async function* source() {
+      pulls++;
+      yield frame();
+    }
+    await expect(countFrames(source(), AbortSignal.abort(reason))).rejects.toBe(reason);
+    expect(pulls).toBe(0);
   });
 
-  it("preserves filesystem errors for the caller", async () => {
-    await withMp3(frame(), async (path) => {
-      await rm(path);
-      await expect(countFrames(path)).rejects.toMatchObject({ code: "ENOENT" });
-    });
+  it("preserves upstream iterator failures for the caller", async () => {
+    const failure = new Error("Upstream read failed");
+    async function* source() {
+      yield frame();
+      throw failure;
+    }
+    await expect(countFrames(source())).rejects.toBe(failure);
+  });
+
+  it.each([1, 2, 3])("assembles headers split after byte %i", async (split) => {
+    const bytes = Buffer.concat([frame(), frame("fffa9200", 418), frame("fffb78c0", 432)]);
+    expect(await countFrames(chunkBytes(bytes, [split, 4 - split, 413]))).toBe(3);
+  });
+
+  it.each([{ sizes: [1] }, { sizes: [2, 7, 31, 3, 509] }, { sizes: [4096] }])(
+    "counts arbitrary chunk boundaries $sizes",
+    async ({ sizes }) => {
+      const bytes = Buffer.concat([frame(), frame("fffa9200", 418), frame("fffb78c0", 432)]);
+      expect(await countFrames(chunkBytes(bytes, sizes))).toBe(3);
+    },
+  );
+
+  it("rejects a truncated header after complete frames", async () => {
+    await expect(count(Buffer.concat([frame(), Buffer.from("fffb", "hex")]))).rejects.toThrow(
+      InvalidMp3Error,
+    );
+  });
+
+  it("ignores empty producer chunks without treating them as EOF", async () => {
+    async function* source() {
+      yield new Uint8Array();
+      yield frame();
+      yield new Uint8Array();
+      yield frame();
+    }
+    expect(await countFrames(source())).toBe(2);
   });
 });

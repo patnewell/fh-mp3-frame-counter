@@ -1,77 +1,67 @@
 import { InvalidMp3Error } from "./error.ts";
 import { type FrameHeader, readHeader } from "./header.ts";
-import { type FileReader, READ_WINDOW_BYTES } from "./reader.ts";
+import type { StreamReader } from "./reader.ts";
 
 type FreeHeader = Extract<FrameHeader, { kind: "free" }>;
+export const MAX_FREE_FRAME_BYTES = 128 * 1024;
+export const MAX_INFERENCE_RUNS = 4096;
+export const MAX_SEARCH_BYTES = 16 * 1024 * 1024;
 
-/**
- * Resume scanning at cursor, the next unexamined header position after any selected boundary.
- * Numeric checkpoints permit retries without retaining a read window per candidate.
- */
-export interface CandidateScan {
-  readonly origin: number;
-  readonly first: FreeHeader;
-  cursor: number;
-}
+/** Stream-wide counters survive every new run; ordinary indexed traversal consumes neither. */
+export class InferenceBudget {
+  #runs = 0;
+  #positions = 0;
 
-export function candidateScan(origin: number, first: FreeHeader): CandidateScan {
-  return { origin, first, cursor: origin + first.minimumBytes };
-}
-
-/** This bounds charged framing work, not all metadata work or physical disk I/O. */
-export class FramingBudget {
-  #remainingBytes: number;
-  #remainingCandidates = 4096;
-
-  constructor(fileBytes: number) {
-    this.#remainingBytes = Math.min(Number.MAX_SAFE_INTEGER, fileBytes * 8);
+  begin(): void {
+    if (++this.#runs > MAX_INFERENCE_RUNS) {
+      throw new InvalidMp3Error("Free-format inference exceeded its run budget.");
+    }
   }
 
-  get exhausted(): boolean {
-    return this.#remainingBytes < 0 || this.#remainingCandidates < 0;
-  }
-
-  visit(bytes: number): void {
-    this.#remainingBytes -= bytes;
-    if (this.#remainingBytes < 0)
-      throw new InvalidMp3Error("Framing search exceeded its work budget.");
-  }
-
-  select(): void {
-    if (--this.#remainingCandidates < 0) {
-      throw new InvalidMp3Error("Framing search exceeded its candidate budget.");
+  examine(): void {
+    if (++this.#positions > MAX_SEARCH_BYTES) {
+      throw new InvalidMp3Error("Free-format inference exceeded its search budget.");
     }
   }
 }
 
-/** Return the next possible unpadded length; the caller must validate the full continuation. */
-export async function nextFreeLength(
-  input: FileReader,
-  scan: CandidateScan,
-  budget: FramingBudget,
-): Promise<number | undefined> {
-  while (scan.cursor + 4 <= input.size) {
-    const window = await input.read(
-      scan.cursor,
-      Math.min(READ_WINDOW_BYTES, input.size - scan.cursor),
-    );
-    if (window.length < 4) return undefined;
-    for (let index = 0; index + 4 <= window.length; index++) {
-      if (window[index] !== 0xff) continue;
-      const header = readHeader(window.subarray(index, index + 4));
-      if (header?.kind !== "free" || header.sampleRateHz !== scan.first.sampleRateHz) continue;
-      const unpadded = scan.cursor + index - scan.origin - scan.first.padding;
-      const nextBytes = unpadded + header.padding;
-      if (nextBytes < header.minimumBytes || scan.cursor + index + nextBytes > input.size) continue;
-      budget.visit(index + 1);
-      budget.select();
-      scan.cursor += index + 1;
-      return unpadded;
+/** Commit the earliest local boundary. Consuming its header completes the preceding free frame. */
+export async function inferFreeLength(
+  input: StreamReader,
+  first: FreeHeader,
+  budget: InferenceBudget,
+): Promise<{ bytes: number; next: FreeHeader }> {
+  budget.begin();
+  const origin = input.position - 4;
+  await input.skip(first.minimumBytes - 4);
+  const headerBytes = Buffer.alloc(4);
+  let word = 0;
+  let filled = 0;
+  while (true) {
+    const view = await input.view();
+    if (view.length === 0) throw new InvalidMp3Error("Cannot infer the free-format frame length.");
+    for (let index = 0; index < view.length; index++) {
+      word = ((word << 8) | view.readUInt8(index)) >>> 0;
+      if (filled < 4) filled++;
+      if (filled < 4) continue;
+      const bytes = input.position + index - 3 - origin - first.padding;
+      budget.examine();
+      if (word >>> 21 === 0x7ff) {
+        headerBytes.writeUInt32BE(word);
+        const next = readHeader(headerBytes);
+        if (
+          next?.kind === "free" &&
+          next.sampleRateHz === first.sampleRateHz &&
+          bytes + next.padding >= next.minimumBytes
+        ) {
+          input.advance(index + 1);
+          return { bytes, next };
+        }
+      }
+      if (bytes >= MAX_FREE_FRAME_BYTES) {
+        throw new InvalidMp3Error("Free-format inference exceeded its distance limit.");
+      }
     }
-    // A header can straddle two windows; retain the three overlapping positions.
-    const examined = window.length - 3;
-    budget.visit(examined);
-    scan.cursor += examined;
+    input.advance(view.length);
   }
-  return undefined;
 }

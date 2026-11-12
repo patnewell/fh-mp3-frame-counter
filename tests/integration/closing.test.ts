@@ -1,15 +1,11 @@
 import { once } from "node:events";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { connect, type Socket } from "node:net";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { createApp } from "../../src/app.ts";
 import { audioBytes, BOUNDARY, barrier, multipart, within } from "../helpers/upload-lifecycle.ts";
 
 it("keeps the upload error contract for a pipelined request after application close begins", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "mp3-closing-"));
-  const { app, admission } = createApp({ tempDirectory: directory });
+  const { app, admission } = createApp();
   const firstReady = barrier();
   const releaseFirst = barrier();
   const secondReady = barrier();
@@ -66,12 +62,10 @@ it("keeps the upload error contract for a pipelined request after application cl
     expect(secondHeaders).toMatch(/\r\nconnection: close(?:\r\n|$)/i);
     expect(JSON.parse(secondBody ?? "")).toEqual({ error: "The service is draining." });
     expect(admission.active).toBe(0);
-    expect(await readdir(directory)).toEqual([]);
   } finally {
     releaseFirst.release();
     socket?.destroy();
     app.server.closeAllConnections();
     await within(closing ?? app.close());
-    await rm(directory, { recursive: true, force: true });
   }
 });

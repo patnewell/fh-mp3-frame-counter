@@ -1,12 +1,23 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { countFrames } from "../../../src/mp3/count.ts";
 import { InvalidMp3Error } from "../../../src/mp3/error.ts";
-import { isTagSuffix, MetadataBudget, skipLeadingTags } from "../../../src/mp3/tags.ts";
-import { ape, frame, id3, id3v1, withMp3, withReader } from "../../helpers/mp3.ts";
+import { ape, chunkBytes, frame, id3, id3v1 } from "../../helpers/mp3.ts";
 
-const count = (bytes: Uint8Array) => withMp3(bytes, countFrames);
+const count = (bytes: Uint8Array) => countFrames(chunkBytes(bytes));
 
-describe("metadata compatibility", () => {
+function ambiguousUnknownSuffix(): Buffer {
+  const tag = id3v1();
+  const decoy = ape();
+  decoy.writeUInt32LE(256, 12);
+  decoy.copy(tag, 96);
+  // The leading junk defeats every complete chain; each TAG also offers a two-tag APE extent.
+  const suffix = Buffer.alloc(1 + 511 * 128);
+  suffix[0] = 1;
+  for (let offset = 1; offset < suffix.length; offset += tag.length) tag.copy(suffix, offset);
+  return suffix;
+}
+
+describe("incremental metadata compatibility", () => {
   it("skips mixed leading envelopes and traverses a complete terminal chain", async () => {
     const leading = Buffer.concat([ape(frame(), true), id3(frame(), 3), id3(frame(), 4, true)]);
     const trailing = Buffer.concat([
@@ -15,10 +26,9 @@ describe("metadata compatibility", () => {
       ape(frame(), true),
       id3v1(),
     ]);
-    expect(await count(Buffer.concat([leading, frame(), trailing]))).toBe(1);
-    await withReader(Buffer.concat([leading, frame()]), async (input) => {
-      expect(await skipLeadingTags(input)).toBe(leading.length);
-    });
+    const bytes = Buffer.concat([leading, frame(), trailing]);
+    expect(await count(bytes)).toBe(1);
+    expect(await countFrames(chunkBytes(bytes, [1]))).toBe(1);
   });
 
   it("accepts terminal APEv1 without claiming to validate metadata items", async () => {
@@ -45,7 +55,7 @@ describe("metadata compatibility", () => {
     expect(await count(Buffer.concat([audio, tag]))).toBe(1);
   });
 
-  it("tries the valid chain when an ID3v1 payload suggests a competing APE extent", async () => {
+  it("prefers the forward ID3v1 envelope over an APE lookalike inside its payload", async () => {
     const last = id3v1();
     const decoy = ape();
     decoy.writeUInt32LE(100, 12);
@@ -60,46 +70,100 @@ describe("metadata compatibility", () => {
   });
 
   it("does not impose a recursion or ambiguity limit on 5000 ordinary tags", async () => {
-    const tags = Buffer.concat(Array.from({ length: 5000 }, id3v1));
-    expect(await count(Buffer.concat([frame(), tags]))).toBe(1);
+    async function* source() {
+      yield frame();
+      for (let repetition = 0; repetition < 5000; repetition++) yield id3v1();
+    }
+    expect(await countFrames(source())).toBe(1);
   });
 
-  it("limits alternative chains rather than allowing adversarial branching", async () => {
+  it("accepts forward TAG chains without charging APE payload lookalikes as alternatives", async () => {
+    // 002 speculated backward over these descriptors; 005 commits recognized forward tags.
     const overlapping = id3v1();
     const decoy = ape();
     decoy.writeUInt32LE(256, 12);
     decoy.copy(overlapping, 96);
-    const bytes = Buffer.concat(Array.from({ length: 8198 }, () => overlapping));
-    await withReader(bytes, async (input) => {
-      await expect(isTagSuffix(input, 0, new MetadataBudget())).rejects.toThrow(
-        /alternative metadata chains/,
-      );
-    });
+    async function* source() {
+      yield frame();
+      for (let repetition = 0; repetition < 8198; repetition++) yield overlapping;
+    }
+    expect(await countFrames(source())).toBe(1);
   });
 
-  it("shares its 4096-alternative allowance across repeated suffix checks", async () => {
-    const last = id3v1();
-    const decoy = ape();
-    decoy.writeUInt32LE(100, 12);
-    decoy.copy(last, 96);
-    await withReader(Buffer.concat([id3v1(), last]), async (input) => {
-      const budget = new MetadataBudget();
-      for (let attempt = 0; attempt < 4096; attempt++) {
-        expect(await isTagSuffix(input, 0, budget)).toBe(true);
+  it("accepts exactly 64 KiB of undeclared footer-only APE metadata", async () => {
+    const suffix = ape(Buffer.alloc(65_536 - 32, 0x55));
+    expect(await countFrames(chunkBytes(Buffer.concat([frame(), suffix]), [3, 29, 1024]))).toBe(1);
+  });
+
+  it("rejects an undeclared terminal suffix beyond 64 KiB instead of retaining it", async () => {
+    const suffix = ape(Buffer.alloc(65_537 - 32, 0x55));
+    await expect(count(Buffer.concat([frame(), suffix]))).rejects.toThrow(InvalidMp3Error);
+  });
+
+  it("bounds alternative chains within the unknown suffix allowance", async () => {
+    const suffix = ambiguousUnknownSuffix();
+    expect(suffix.length).toBe(65_409);
+    await expect(count(Buffer.concat([frame(), suffix]))).rejects.toThrow(
+      /alternative metadata chains/,
+    );
+  });
+
+  it("allows event-loop cancellation during bounded suffix validation after EOF", async () => {
+    const controller = new AbortController();
+    const reason = new Error("Cancel terminal alternatives");
+    let cancellation: NodeJS.Immediate | undefined;
+    async function* source() {
+      yield frame();
+      yield ambiguousUnknownSuffix();
+      // Schedule only when EOF is requested, after the byte-consumption phase has finished.
+      cancellation = setImmediate(() => controller.abort(reason));
+    }
+    try {
+      await expect(countFrames(source(), controller.signal)).rejects.toBe(reason);
+    } finally {
+      clearImmediate(cancellation);
+    }
+  });
+
+  it.each([1, 4, 32])(
+    "owns metadata descriptors when a producer reuses %i-byte chunks",
+    async (size) => {
+      const bytes = Buffer.concat([
+        id3(Buffer.alloc(513, 0x55), 4, true),
+        ape(Buffer.alloc(519, 0x55), true),
+        frame(),
+        id3(Buffer.alloc(513, 0x55), 4, true),
+        ape(Buffer.alloc(519, 0x55), true),
+      ]);
+      async function* reused() {
+        const scratch = Buffer.alloc(size);
+        for (let offset = 0; offset < bytes.length; offset += size) {
+          const length = Math.min(size, bytes.length - offset);
+          bytes.copy(scratch, 0, offset, offset + length);
+          yield scratch.subarray(0, length);
+        }
       }
-      expect(budget.exhausted).toBe(false);
-      await expect(isTagSuffix(input, 0, budget)).rejects.toThrow(/alternative metadata chains/);
-      expect(budget.exhausted).toBe(true);
-    });
+      expect(await countFrames(reused())).toBe(1);
+    },
+  );
+
+  it("requires every byte of a terminal suffix to be valid metadata", async () => {
+    await expect(
+      count(Buffer.concat([frame(), ape(Buffer.alloc(17)), Buffer.of(1)])),
+    ).rejects.toThrow(InvalidMp3Error);
+    await expect(count(Buffer.concat([frame(), id3v1(), frame()]))).rejects.toThrow(
+      InvalidMp3Error,
+    );
   });
 
-  it("requires every byte of the suffix to belong to its complete tag chain", async () => {
-    await withReader(Buffer.concat([frame(), id3v1()]), async (input) => {
-      const budget = new MetadataBudget();
-      expect(await isTagSuffix(input, 417, budget)).toBe(true);
-      expect(await isTagSuffix(input, 0, budget)).toBe(false);
-      expect(await isTagSuffix(input, input.size, budget)).toBe(false);
-    });
+  it.each([
+    ["ID3v1", id3v1()],
+    ["paired ID3v2.4", id3(Buffer.from("title"), 4, true)],
+    ["paired APEv2", ape(Buffer.from("title"), true)],
+  ])("rejects resumed audio after terminal %s even in one-byte chunks", async (_name, tag) => {
+    const bytes = Buffer.concat([frame(), tag, frame()]);
+    await expect(count(bytes)).rejects.toThrow(InvalidMp3Error);
+    await expect(countFrames(chunkBytes(bytes, [1]))).rejects.toThrow(InvalidMp3Error);
   });
 
   it.each([
@@ -154,14 +218,41 @@ describe("metadata compatibility", () => {
   it("propagates an abort during terminal metadata traversal", async () => {
     const controller = new AbortController();
     const reason = new Error("Cancel metadata");
-    await withReader(
-      Buffer.concat([ape(), id3v1()]),
-      async (input) => {
-        const pending = isTagSuffix(input, 0, new MetadataBudget());
-        controller.abort(reason);
-        await expect(pending).rejects.toBe(reason);
-      },
-      controller.signal,
-    );
+    async function* source() {
+      yield frame();
+      yield ape();
+      controller.abort(reason);
+      yield id3v1();
+    }
+    await expect(countFrames(source(), controller.signal)).rejects.toBe(reason);
   });
+
+  it.each(["leading ID3", "trailing ID3", "leading APE", "trailing APE"])(
+    "skips a large declared %s body lazily without applying the unknown-suffix allowance",
+    async (kind) => {
+      const size = 8 * 1024 * 1024;
+      const payload = Buffer.alloc(64 * 1024, 0x55);
+      let header: Buffer;
+      let footer: Buffer;
+      if (kind.endsWith("ID3")) {
+        header = id3(Buffer.alloc(0), 4, true).subarray(0, 10);
+        for (let index = 0; index < 4; index++) header[9 - index] = (size >>> (7 * index)) & 127;
+        footer = Buffer.from(header);
+        footer.write("3DI");
+      } else {
+        header = ape(Buffer.alloc(0), true).subarray(0, 32);
+        header.writeUInt32LE(size + 32, 12);
+        footer = Buffer.from(header);
+        footer.writeUInt32LE(0x8000_0000, 20);
+      }
+      async function* source() {
+        if (kind.startsWith("trailing")) yield frame();
+        yield header;
+        for (let offset = 0; offset < size; offset += payload.length) yield payload;
+        yield footer;
+        if (kind.startsWith("leading")) yield frame();
+      }
+      expect(await countFrames(source())).toBe(1);
+    },
+  );
 });

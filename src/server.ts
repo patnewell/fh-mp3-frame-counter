@@ -23,14 +23,14 @@ export async function runServer(
 
   async function shutdown(): Promise<void> {
     let finalTimer: NodeJS.Timeout | undefined;
-    // Both timers remain referenced: an unsettled disposal promise alone cannot keep Node alive.
+    // Both timers remain referenced: an unsettled parser promise alone cannot keep Node alive.
     const graceTimer = setTimeout(() => {
       logEvent(app.log, { event: "shutdown_forced", activeUploads: admission.active });
       finalTimer = setTimeout(() => {
         logEvent(app.log, { event: "shutdown_failed" });
         process.exit(1);
       }, 1000);
-      // Closing active responses invokes the existing request cancellation and disposal paths.
+      // Closing active responses invokes the existing request cancellation and stream release paths.
       app.server.closeAllConnections();
     }, config.shutdownGraceMs);
     try {

@@ -1,7 +1,4 @@
-import { createWriteStream } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { finished, pipeline } from "node:stream/promises";
+import { finished } from "node:stream/promises";
 import { MIMEType } from "node:util";
 import multipart from "@fastify/multipart";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -12,15 +9,13 @@ import { describeUploadError, discardRejectedBody, sendUploadError, UploadError 
 import { beginUpload, type UploadLifetime } from "./lifetime.ts";
 
 interface UploadSettings {
-  readonly tempDirectory: string;
   readonly maxFileBytes: number;
   readonly timeoutMs: number;
 }
 
 /** Only asynchronous work whose timing/failure matters to ownership is replaceable in tests. */
 export interface UploadOperations {
-  count(path: string, signal: AbortSignal): Promise<number>;
-  dispose(directory: string): Promise<void>;
+  count(input: AsyncIterable<Uint8Array>, signal: AbortSignal): Promise<number>;
 }
 
 export function registerUploadRoute(
@@ -31,7 +26,6 @@ export function registerUploadRoute(
 ): void {
   const operations: UploadOperations = {
     count: countFrames,
-    dispose: (directory) => rm(directory, { recursive: true, force: true }),
     ...overrides,
   };
   const lifetimes = new WeakMap<FastifyRequest, UploadLifetime>();
@@ -91,13 +85,8 @@ export function registerUploadRoute(
       if (!lifetime) throw new Error("Upload admission has not been initialized.");
       try {
         const frameCount = await lifetime.run(async () => {
-          let directory: string | undefined;
           try {
-            directory = await mkdtemp(join(settings.tempDirectory, "mp3-"));
-            // The client filename is never used as a path or logged.
-            const path = join(directory, "upload.mp3");
-            await receiveUpload(request, path, lifetime.signal);
-            return await operations.count(path, lifetime.signal);
+            return await countUpload(request, operations.count, lifetime.signal);
           } catch (error) {
             const cancelled =
               lifetime.signal.aborted &&
@@ -111,11 +100,6 @@ export function registerUploadRoute(
               });
             }
             throw error;
-          } finally {
-            // Cancellation must not skip the attempt to remove private uploaded data.
-            if (directory !== undefined) {
-              await disposeUpload(directory, operations.dispose, request);
-            }
           }
         });
         lifetime.finish();
@@ -126,24 +110,6 @@ export function registerUploadRoute(
       }
     },
   );
-}
-
-async function disposeUpload(
-  directory: string,
-  dispose: UploadOperations["dispose"],
-  request: FastifyRequest,
-): Promise<void> {
-  try {
-    await dispose(directory);
-  } catch (error) {
-    // This attempt can fail after timeout/disconnect; its failure still needs an operational event.
-    logEvent(request.log, {
-      event: "upload_failed",
-      requestId: request.id,
-      category: "cleanup",
-    });
-    throw error;
-  }
 }
 
 function validateMultipartHeaders(request: FastifyRequest): void {
@@ -169,21 +135,46 @@ function validateMultipartHeaders(request: FastifyRequest): void {
   request.headers["content-type"] = `multipart/form-data; boundary="${boundary}"`;
 }
 
-async function receiveUpload(
+async function countUpload(
   request: FastifyRequest,
-  path: string,
+  count: UploadOperations["count"],
   signal: AbortSignal,
-): Promise<void> {
+): Promise<number> {
   signal.throwIfAborted();
-  let received = false;
+  let frameCount: number | undefined;
   for await (const part of request.parts()) {
     if (part.type !== "file" || part.fieldname !== "file") {
-      if (part.type === "file") part.file.destroy();
+      if (part.type === "file") {
+        const settled = finished(part.file, { cleanup: true }).catch(() => undefined);
+        part.file.destroy();
+        await settled;
+      }
       throw new UploadError(400, "Expected exactly one file field named file.");
     }
-    await pipeline(part.file, createWriteStream(path, { flags: "wx", mode: 0o600 }), { signal });
-    if (part.file.truncated) throw new UploadError(413, "The file exceeds the upload limit.");
-    received = true;
+    // The lifetime owns both promises. Cancellation closes a blocked source read,
+    // but cannot release capacity while a counter that ignores it is still pending.
+    const settled = finished(part.file, { cleanup: true });
+    void settled.catch(() => undefined);
+    const cancel = (): void => {
+      part.file.destroy();
+    };
+    signal.addEventListener("abort", cancel, { once: true });
+    if (signal.aborted) cancel();
+    try {
+      try {
+        frameCount = await count(part.file, signal);
+      } catch (error) {
+        if (part.file.truncated) throw new UploadError(413, "The file exceeds the upload limit.");
+        throw error;
+      }
+      if (part.file.truncated) throw new UploadError(413, "The file exceeds the upload limit.");
+      if (!part.file.readableEnded) throw new Error("The counter returned before file EOF.");
+      await settled;
+    } finally {
+      if (!part.file.readableEnded) part.file.destroy();
+      await settled.catch(() => undefined);
+      signal.removeEventListener("abort", cancel);
+    }
   }
   // A closing multipart delimiter does not establish that the HTTP epilogue ended.
   const bodyComplete = finished(request.raw, {
@@ -195,5 +186,7 @@ async function receiveUpload(
   request.raw.resume();
   await bodyComplete;
   signal.throwIfAborted();
-  if (!received) throw new UploadError(400, "Expected exactly one file field named file.");
+  if (frameCount === undefined)
+    throw new UploadError(400, "Expected exactly one file field named file.");
+  return frameCount;
 }
