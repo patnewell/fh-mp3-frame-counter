@@ -34,11 +34,21 @@ The source count is structural. It does not validate compressed samples, CRC
 values or all metadata items. See [MP3 limits](mp3.md#deliberate-limits) and
 [operations](operations.md) for ingress, failed disposal and resource boundaries.
 
+## Final application gate
+
+The clean revision `a67beed776cbeb663f44640f27f5081a4a46555d` passed
+`npm run verify`: lint, strict typecheck, clean compilation and **318 tests
+across 19 files** (225 unit/component, 93 integration, no failures or skips).
+Coverage is 96.99% statements, 95.59% branches, 97.64% functions and 99.35% lines.
+The [004 record](../specs/004-operate-containerized-service/verification.md)
+explains review corrections, red/green regressions and the precise coverage scope.
+Subsequent evidence/merge commits do not change application behavior.
+
 ## Evidence scope
 
 All recorded local application gates use Linux x64 and Node 24.22.3. Historical
 counts remain 125 tests for 001, 187 for 002 and 227 for 003; the final operational
-cycle records its own larger suite. Coverage percentages measure only the stated
+cycle has 318. Coverage percentages measure only the stated
 source set; `server.ts` and `healthcheck.ts` are exercised as compiled child
 processes outside that coverage set.
 
