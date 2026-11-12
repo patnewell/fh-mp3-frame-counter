@@ -5,6 +5,18 @@ import { ape, chunkBytes, frame, id3, id3v1 } from "../../helpers/mp3.ts";
 
 const count = (bytes: Uint8Array) => countFrames(chunkBytes(bytes));
 
+function ambiguousUnknownSuffix(): Buffer {
+  const tag = id3v1();
+  const decoy = ape();
+  decoy.writeUInt32LE(256, 12);
+  decoy.copy(tag, 96);
+  // The leading junk defeats every complete chain; each TAG also offers a two-tag APE extent.
+  const suffix = Buffer.alloc(1 + 511 * 128);
+  suffix[0] = 1;
+  for (let offset = 1; offset < suffix.length; offset += tag.length) tag.copy(suffix, offset);
+  return suffix;
+}
+
 describe("incremental metadata compatibility", () => {
   it("skips mixed leading envelopes and traverses a complete terminal chain", async () => {
     const leading = Buffer.concat([ape(frame(), true), id3(frame(), 3), id3(frame(), 4, true)]);
@@ -87,6 +99,53 @@ describe("incremental metadata compatibility", () => {
     const suffix = ape(Buffer.alloc(65_537 - 32, 0x55));
     await expect(count(Buffer.concat([frame(), suffix]))).rejects.toThrow(InvalidMp3Error);
   });
+
+  it("bounds alternative chains within the unknown suffix allowance", async () => {
+    const suffix = ambiguousUnknownSuffix();
+    expect(suffix.length).toBe(65_409);
+    await expect(count(Buffer.concat([frame(), suffix]))).rejects.toThrow(
+      /alternative metadata chains/,
+    );
+  });
+
+  it("allows event-loop cancellation during bounded suffix validation after EOF", async () => {
+    const controller = new AbortController();
+    const reason = new Error("Cancel terminal alternatives");
+    let cancellation: NodeJS.Immediate | undefined;
+    async function* source() {
+      yield frame();
+      yield ambiguousUnknownSuffix();
+      // Schedule only when EOF is requested, after the byte-consumption phase has finished.
+      cancellation = setImmediate(() => controller.abort(reason));
+    }
+    try {
+      await expect(countFrames(source(), controller.signal)).rejects.toBe(reason);
+    } finally {
+      clearImmediate(cancellation);
+    }
+  });
+
+  it.each([1, 4, 32])(
+    "owns metadata descriptors when a producer reuses %i-byte chunks",
+    async (size) => {
+      const bytes = Buffer.concat([
+        id3(Buffer.alloc(513, 0x55), 4, true),
+        ape(Buffer.alloc(519, 0x55), true),
+        frame(),
+        id3(Buffer.alloc(513, 0x55), 4, true),
+        ape(Buffer.alloc(519, 0x55), true),
+      ]);
+      async function* reused() {
+        const scratch = Buffer.alloc(size);
+        for (let offset = 0; offset < bytes.length; offset += size) {
+          const length = Math.min(size, bytes.length - offset);
+          bytes.copy(scratch, 0, offset, offset + length);
+          yield scratch.subarray(0, length);
+        }
+      }
+      expect(await countFrames(reused())).toBe(1);
+    },
+  );
 
   it("requires every byte of a terminal suffix to be valid metadata", async () => {
     await expect(
