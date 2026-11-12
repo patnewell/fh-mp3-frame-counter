@@ -55,7 +55,12 @@ export function createApp(
   });
   app.addHook("onReady", checkStorage);
   app.addHook("preClose", async () => admission.stop());
-  app.addHook("onClose", () => admission.drained());
+  app.addHook("onClose", async () => {
+    // A disconnected readiness client does not cancel its in-flight filesystem work.
+    const probe = storageProbe;
+    await admission.drained();
+    await probe;
+  });
   app.addHook("onSend", async (_request, reply, payload) => {
     if (!admission.accepting) reply.header("connection", "close");
     return payload;
