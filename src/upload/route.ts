@@ -5,6 +5,7 @@ import { finished, pipeline } from "node:stream/promises";
 import { MIMEType } from "node:util";
 import multipart from "@fastify/multipart";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { logEvent } from "../logging.ts";
 import { countFrames } from "../mp3/count.ts";
 import type { UploadAdmission } from "./admission.ts";
 import { describeUploadError, discardRejectedBody, sendUploadError, UploadError } from "./error.ts";
@@ -90,15 +91,31 @@ export function registerUploadRoute(
       if (!lifetime) throw new Error("Upload admission has not been initialized.");
       try {
         const frameCount = await lifetime.run(async () => {
-          const directory = await mkdtemp(join(settings.tempDirectory, "mp3-"));
+          let directory: string | undefined;
           try {
+            directory = await mkdtemp(join(settings.tempDirectory, "mp3-"));
             // The client filename is never used as a path or logged.
             const path = join(directory, "upload.mp3");
             await receiveUpload(request, path, lifetime.signal);
             return await operations.count(path, lifetime.signal);
+          } catch (error) {
+            const cancelled =
+              lifetime.signal.aborted &&
+              (error === lifetime.signal.reason ||
+                (error instanceof Error && error.name === "AbortError"));
+            if (!cancelled && describeUploadError(error).status === 500) {
+              logEvent(request.log, {
+                event: "upload_failed",
+                requestId: request.id,
+                category: "processing",
+              });
+            }
+            throw error;
           } finally {
             // Cancellation must not skip the attempt to remove private uploaded data.
-            await operations.dispose(directory);
+            if (directory !== undefined) {
+              await disposeUpload(directory, operations.dispose, request);
+            }
           }
         });
         lifetime.finish();
@@ -109,6 +126,24 @@ export function registerUploadRoute(
       }
     },
   );
+}
+
+async function disposeUpload(
+  directory: string,
+  dispose: UploadOperations["dispose"],
+  request: FastifyRequest,
+): Promise<void> {
+  try {
+    await dispose(directory);
+  } catch (error) {
+    // This attempt can fail after timeout/disconnect; its failure still needs an operational event.
+    logEvent(request.log, {
+      event: "upload_failed",
+      requestId: request.id,
+      category: "cleanup",
+    });
+    throw error;
+  }
 }
 
 function validateMultipartHeaders(request: FastifyRequest): void {

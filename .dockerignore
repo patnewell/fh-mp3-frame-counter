@@ -1,0 +1,11 @@
+# Allow only inputs used by the three build stages; exclude Git, fixtures and local data.
+**
+!Dockerfile
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.build.json
+!src/
+!src/**
+!scripts/
+!scripts/clean.ts
