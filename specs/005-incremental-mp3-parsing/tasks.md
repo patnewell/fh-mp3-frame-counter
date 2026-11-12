@@ -2,7 +2,7 @@
 
 ## Domain increment
 
-- [ ] [T01] Add failing async-input/chunk/progress regressions in `tests/unit/mp3/` and adapt `tests/helpers/mp3.ts`; implement the bounded forward parser in `src/mp3/`, retaining mandatory fixture evidence in `tests/integration/fixtures.test.ts`. Replace obsolete seek tests with stream carry/backpressure/cancellation tests and explicitly migrated ambiguity expectations. Run focused parser checks and commit this usable increment before T02.
+- [x] [T01] Add failing async-input/chunk/progress regressions in `tests/unit/mp3/` and adapt `tests/helpers/mp3.ts`; implement the bounded forward parser in `src/mp3/`, retaining mandatory fixture evidence in `tests/integration/fixtures.test.ts`. Replace obsolete seek tests with stream carry/backpressure/cancellation tests and explicitly migrated ambiguity expectations. Run focused parser checks and commit this usable increment before T02.
 
 ## Streaming service increment
 

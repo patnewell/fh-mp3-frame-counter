@@ -1,8 +1,3 @@
-import { mkdtemp, open, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { FileReader } from "../../src/mp3/reader.ts";
-
 /** Structural test bytes, not an independently encoded audio fixture. */
 export function frame(header = "fffb9000", length = 417): Buffer {
   const bytes = Buffer.alloc(length, 0x55);
@@ -37,31 +32,18 @@ export function ape(payload: Buffer = Buffer.alloc(0), paired = false, version =
   return Buffer.concat([header, payload, footer]);
 }
 
-export async function withMp3<T>(
+/** Lazy, deterministic boundaries; this helper never collects a source stream. */
+export async function* chunkBytes(
   bytes: Uint8Array,
-  inspect: (path: string) => Promise<T>,
-): Promise<T> {
-  const directory = await mkdtemp(join(tmpdir(), "mp3-parser-test-"));
-  try {
-    const path = join(directory, "input.mp3");
-    await writeFile(path, bytes);
-    return await inspect(path);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
+  sizes: readonly number[] = [64 * 1024],
+): AsyncGenerator<Uint8Array> {
+  let offset = 0;
+  let turn = 0;
+  while (offset < bytes.length) {
+    const size = sizes[turn++ % sizes.length] ?? 64 * 1024;
+    if (!Number.isSafeInteger(size) || size < 1) throw new RangeError("Invalid test chunk size.");
+    const end = Math.min(offset + size, bytes.length);
+    yield bytes.subarray(offset, end);
+    offset = end;
   }
-}
-
-export async function withReader<T>(
-  bytes: Uint8Array,
-  inspect: (reader: FileReader) => Promise<T>,
-  signal?: AbortSignal,
-): Promise<T> {
-  return withMp3(bytes, async (path) => {
-    const file = await open(path, "r");
-    try {
-      return await inspect(new FileReader(file, bytes.length, signal));
-    } finally {
-      await file.close();
-    }
-  });
 }

@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { countFrames } from "../../../src/mp3/count.ts";
 import { InvalidMp3Error } from "../../../src/mp3/error.ts";
-import { FramingBudget } from "../../../src/mp3/free-format.ts";
-import { ape, frame, id3, id3v1, withMp3 } from "../../helpers/mp3.ts";
+import { ape, chunkBytes, frame, id3, id3v1 } from "../../helpers/mp3.ts";
 
-const count = (bytes: Uint8Array) => withMp3(bytes, countFrames);
+const count = (bytes: Uint8Array) => countFrames(chunkBytes(bytes));
 const free = (bytes = 500, padding = 0) =>
   frame(padding ? "fffb0200" : "fffb0000", bytes + padding);
 
@@ -14,22 +13,23 @@ describe("free-format compatibility", () => {
     expect(await count(Buffer.concat([free(500, 1), free(), free(500, 1), free()]))).toBe(4);
   });
 
-  it("chooses the earliest complete candidate layout when several counts are possible", async () => {
+  it("commits the earliest compatible boundary when several layouts are possible", async () => {
     // The same 600 bytes admit 100-, 200- and 300-byte frame interpretations.
     expect(await count(Buffer.concat(Array.from({ length: 6 }, () => free(100))))).toBe(6);
   });
 
-  it("retries tempting payload boundaries after their continuation fails", async () => {
+  it("rejects a later contradiction after committing a tempting payload boundary", async () => {
     const first = free();
     for (const offset of [100, 200]) Buffer.from("fffb0000", "hex").copy(first, offset);
-    expect(await count(Buffer.concat([first, free(), free()]))).toBe(3);
+    // 005 deliberately replaces the old successful full-suffix retry with a local commitment.
+    await expect(count(Buffer.concat([first, free(), free()]))).rejects.toThrow(InvalidMp3Error);
   });
 
-  it("can unwind nested choices beyond an indexed continuation", async () => {
+  it("does not rewind a committed choice across an indexed continuation", async () => {
     const first = free();
     for (const offset of [100, 200, 404, 444]) Buffer.from("fffb0000", "hex").copy(first, offset);
     Buffer.from("fffb1000", "hex").copy(first, 300);
-    expect(await count(Buffer.concat([first, free(), free()]))).toBe(3);
+    await expect(count(Buffer.concat([first, free(), free()]))).rejects.toThrow(InvalidMp3Error);
   });
 
   it("establishes a new length after indexed frames or a rate change", async () => {
@@ -64,8 +64,9 @@ describe("free-format compatibility", () => {
     expect(await count(Buffer.concat([bytes, id3v1()]))).toBe(2);
   });
 
-  it("finds a compatible header divided across read windows", async () => {
-    expect(await count(Buffer.concat([free(65_570), free(65_570), free(65_570)]))).toBe(3);
+  it("finds a compatible header divided across producer chunks", async () => {
+    const bytes = Buffer.concat([free(65_570), free(65_570), free(65_570)]);
+    expect(await countFrames(chunkBytes(bytes, [65_571, 2, 17]))).toBe(3);
   });
 
   it.each([
@@ -76,24 +77,17 @@ describe("free-format compatibility", () => {
     await expect(count(bytes)).rejects.toThrow(InvalidMp3Error);
   });
 
-  it("bounds traversal of many plausible layouts that all fail near EOF", async () => {
+  it("rejects a contradictory committed layout without an EOF-sized retry search", async () => {
     const bytes = Buffer.alloc(4001);
     for (let offset = 0; offset < 4000; offset += 100)
       Buffer.from("fffb0000", "hex").copy(bytes, offset);
-    await expect(count(bytes)).rejects.toThrow(/work budget/);
+    await expect(count(bytes)).rejects.toThrow(InvalidMp3Error);
   });
 
-  it("does not bypass metadata exhaustion by retrying a later valid frame length", async () => {
+  it("rejects the formerly seekable 1.1 MiB free-frame layout at the inference bound", async () => {
+    // 002 reached metadata ambiguity on this size; 005 rejects before retaining/reading that extent.
     const bytes = Buffer.concat([free(1_100_000), free(1_100_000)]);
-    Buffer.from("fffb0000", "hex").copy(bytes, 100);
-    const overlapping = id3v1();
-    const decoy = ape();
-    decoy.writeUInt32LE(256, 12);
-    decoy.copy(overlapping, 96);
-    for (let offset = bytes.length - 8198 * 128; offset < bytes.length; offset += 128) {
-      overlapping.copy(bytes, offset);
-    }
-    await expect(count(bytes)).rejects.toThrow(/alternative metadata chains/);
+    await expect(count(bytes)).rejects.toThrow(/distance|length|limit|bound/);
   });
 
   it("accepts 4096 inferred runs and rejects the next candidate", async () => {
@@ -104,24 +98,36 @@ describe("free-format compatibility", () => {
     ]);
     const bytes = Buffer.concat(Array.from({ length: 4097 }, () => run));
     expect(await count(bytes.subarray(0, bytes.length - run.length))).toBe(12_288);
-    await expect(count(bytes)).rejects.toThrow(/candidate budget/);
+    await expect(count(bytes)).rejects.toThrow(/candidate|inference|run/);
   });
 
   it("propagates cancellation instead of trying another interpretation", async () => {
     const controller = new AbortController();
     const reason = new Error("Stop candidate search");
-    await withMp3(Buffer.concat([free(), free(), free()]), async (path) => {
-      const pending = countFrames(path, controller.signal);
-      controller.abort(reason);
-      await expect(pending).rejects.toBe(reason);
-    });
+    const pending = countFrames(
+      chunkBytes(Buffer.concat([free(), free(), free()])),
+      controller.signal,
+    );
+    controller.abort(reason);
+    await expect(pending).rejects.toBe(reason);
   });
 
-  it("permits exactly eight file lengths of charged framing work", () => {
-    const budget = new FramingBudget(100);
-    budget.visit(800);
-    expect(budget.exhausted).toBe(false);
-    expect(() => budget.visit(1)).toThrow(/work budget/);
-    expect(budget.exhausted).toBe(true);
+  it("accepts the 128 KiB unpadded inference distance including first-frame padding", async () => {
+    expect(await count(Buffer.concat([free(128 * 1024, 1), free(128 * 1024)]))).toBe(2);
+  });
+
+  it("rejects a compatible boundary beyond the 128 KiB distance allowance", async () => {
+    await expect(
+      count(Buffer.concat([free(128 * 1024 + 1), free(128 * 1024 + 1)])),
+    ).rejects.toThrow(InvalidMp3Error);
+  });
+
+  it("bounds total inference scanning independently of final stream length", async () => {
+    const run = Buffer.concat([free(128 * 1024), free(128 * 1024), frame()]);
+    async function* repeated(runs: number) {
+      for (let index = 0; index < runs; index++) yield run;
+    }
+    expect(await countFrames(repeated(128))).toBe(384);
+    await expect(countFrames(repeated(129))).rejects.toThrow(/search|work|budget/);
   });
 });
