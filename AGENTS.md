@@ -10,7 +10,7 @@ the owning capability. Load only documentation relevant to the change.
 | ------------------------------- | ------------------------------------------------------ | --------------------------------------------------- |
 | MPEG framing and metadata       | `src/mp3/`                                             | Parser unit tests and real fixtures                 |
 | Multipart and request resources | `src/upload/`, `src/app.ts`                            | Real HTTP and ownership/cancellation tests          |
-| Runtime, probes and shutdown    | `src/config.ts`, `src/server.ts`, `src/healthcheck.ts` | Compiled process and container tests                |
+| Runtime, probes and shutdown    | `src/config.ts`, `src/logging.ts`, `src/server.ts`, `src/healthcheck.ts` | Compiled process and container tests |
 | Agent/build policy              | `biome.json`, `.agents/`, `.codex/`, `.github/`        | Executable harness tests and a complete diff review |
 
 ## Commands at the repository root
