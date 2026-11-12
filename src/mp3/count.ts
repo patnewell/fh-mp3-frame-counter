@@ -10,6 +10,7 @@ interface FreeLength {
   readonly sampleRateHz: number;
 }
 
+/** Save the count before scan.origin's frame; scan.cursor advances beyond each selected boundary. */
 interface Checkpoint {
   readonly scan: CandidateScan;
   readonly count: number;
@@ -24,6 +25,7 @@ export async function countFrames(path: string, signal?: AbortSignal): Promise<n
     let offset = await skipLeadingTags(input);
     let count = 0;
     let freeLength: FreeLength | undefined;
+    // Choices stay provisional until the remaining audio and terminal metadata validate.
     const checkpoints: Checkpoint[] = [];
     const budget = new FramingBudget(input.size);
     const metadataBudget = new MetadataBudget();
@@ -75,6 +77,11 @@ export async function countFrames(path: string, signal?: AbortSignal): Promise<n
   }
 }
 
+/**
+ * Retry the newest choice first, popping only exhausted scans. Restore its pre-frame count/origin,
+ * but keep its advanced cursor so the rejected boundary is not selected again. File-owned budgets
+ * retain all charges from failed layouts; only traversal state rolls back.
+ */
 async function retryCheckpoint(
   input: FileReader,
   checkpoints: Checkpoint[],

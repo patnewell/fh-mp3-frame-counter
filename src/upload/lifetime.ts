@@ -8,7 +8,11 @@ export interface UploadLifetime {
   finish(): void;
 }
 
-/** The permit follows settled work, even when a response or cancellation happens first. */
+/**
+ * run() owns a promise through its cleanup; finish() prevents new work but does not cancel it.
+ * Deadline/disconnect abort the signal and request finishing, even while work is pending.
+ * Release exactly once when finishing is requested AND every owned operation has settled.
+ */
 export function beginUpload(
   request: FastifyRequest,
   reply: FastifyReply,

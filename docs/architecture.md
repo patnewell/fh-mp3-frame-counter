@@ -107,29 +107,33 @@ counting, rejected-body consumption and disposal must settle before capacity
 returns. The only test seams replace count/dispose operations to control those
 observable boundaries.
 
+The lifetime in `src/upload/lifetime.ts` has three logical states:
+
 ```mermaid
-sequenceDiagram
-    participant Client
-    participant HTTP as Request owner
-    participant Work as File operations
-    participant Budget as App admission
-    Client->>HTTP: Upload
-    HTTP->>Budget: Acquire
-    HTTP->>Work: Receive and count
-    alt Deadline before work settles
-        HTTP-->>Work: Abort signal
-        HTTP-->>Client: 503
-        Note over Work,Budget: Permit remains occupied
-        Work->>Work: Settle and dispose
-        Work-->>HTTP: Work settled
-        HTTP->>Budget: Release
-    else Complete normally
-        Work->>Work: Dispose
-        Work-->>HTTP: Count
-        HTTP->>Budget: Release
-        HTTP-->>Client: 200
-    end
+stateDiagram-v2
+    [*] --> Active: Acquire permit
+    Active --> Active: run() starts or settles work
+    Active --> Finishing: finish()
+    Finishing --> Released: Owned operation count reaches zero
+    Released --> [*]
+    note right of Finishing
+        Permit remains held
+        No new run() calls
+    end note
 ```
+
+`run()` counts an operation until its callback's promise settles, including file
+disposal in that callback's `finally`. `finish()` prevents new work and releases the permit only
+when the operation count is zero; it does not itself cancel pending work. With
+no pending work, finishing releases immediately. Repeated finishing/release
+notifications are harmless.
+
+The route calls `finish()` after successful disposal; the error handler's
+`finally` and the `onResponse` hook also request it. A deadline or premature
+request/response disconnect both abort the signal and request finishing. The
+deadline attempts a safe 503 when a reply remains possible. Ordinary request-body
+closure after HTTP completion does neither, so counting can continue. A completed
+response alone cannot release a permit while owned work is still pending.
 
 Default policy is four admitted uploads, a 100 MiB file limit and a 30-second
 deadline. Rejected input has a 64 KiB drain allowance plus at most one delivered

@@ -116,3 +116,37 @@ working tree. Environment: native Windows x64, Node 24.22.3, npm 11.19.1.
 Linux/macOS, Docker and hosted CI were not rerun for this follow-up. The earlier
 Linux milestone, qualifications and delivery history above remain historical;
 this working-tree check does not establish a new packaged release.
+
+## Readability maintenance (2026-11-12)
+
+Tested base `cb7b9899ae9258d3075b9137c0f21e01e126db9d` plus the uncommitted
+readability changes in this working tree, using native Windows x64 and Node
+24.22.3. This maintenance preserves the existing 002 parser and 003 lifecycle
+contracts; it introduces no new feature or acceptance change.
+
+- Replaced the architecture guide's upload sequence sketch with the actual
+  active/finishing/released lifetime states and explained `run()`, `finish()`,
+  cancellation, normal body closure and the settled-work release condition.
+  Added the corresponding source invariant comment.
+- Documented checkpoint origin/count restoration, advancing candidate cursors,
+  depth-first retries and budgets that retain charges across failed layouts in
+  the parser source and MP3 guide.
+- Named local APE descriptor sizes, offsets, versions and flags. The leading
+  role-mask comparison accepts the same top-three-bit pattern as before; the
+  complement of allowed footer flags equals the original `0x7fff_fffe` mask.
+  No public API, ID3 rule, test, fixture, dependency or gate changed.
+- The existing focused metadata suite passed all 28 cases. `npm.cmd run verify`
+  then passed lint, strict typecheck, clean build and coverage: **314 passed,
+  zero failed, four expected Windows skips**. The skips remain the three POSIX
+  signal cases and one POSIX FIFO/SIGUSR2 case described above.
+- Coverage: 97.08% statements (532/548), 95.59% branches (391/409), 97.64%
+  functions (83/85), 99.38% lines (481/484). Added constant declarations change
+  the measured statement/line totals; thresholds and exclusions are unchanged.
+- Independent review applied `review-change` to the complete maintenance diff.
+  It checked all eight leading role-bit patterns with four lower-bit boundary
+  values, the footer-mask equivalence, and the documented lifecycle/checkpoint
+  invariants against their callers. No findings remain; `git diff --check`
+  passed. Agent review is not human approval.
+
+Linux/macOS, Docker and hosted CI were not rerun. Earlier execution evidence and
+literal historical commit references above remain unchanged.

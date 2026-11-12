@@ -4,7 +4,10 @@ import { type FileReader, READ_WINDOW_BYTES } from "./reader.ts";
 
 type FreeHeader = Extract<FrameHeader, { kind: "free" }>;
 
-/** Numeric checkpoints permit retries without retaining a read window per candidate. */
+/**
+ * Resume scanning at cursor, the next unexamined header position after any selected boundary.
+ * Numeric checkpoints permit retries without retaining a read window per candidate.
+ */
 export interface CandidateScan {
   readonly origin: number;
   readonly first: FreeHeader;

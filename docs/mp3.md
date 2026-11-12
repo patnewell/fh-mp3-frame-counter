@@ -43,6 +43,16 @@ candidate fails later, retry a saved alternative. If multiple complete layouts
 are structurally valid, search candidate offsets in ascending order and retry saved choices depth-first. This is an explicit
 ambiguity policy, not proof of a unique decoded interpretation.
 
+Each checkpoint in `src/mp3/count.ts` saves the frame count immediately before
+the frame at `scan.origin`. Its mutable `scan.cursor` points beyond the last
+selected candidate boundary. On a later layout failure, `retryCheckpoint()`
+tries the newest checkpoint first, restores its original offset/count with the
+next inferred length, and pops it only when its scan has no candidates left.
+The advanced cursor prevents repeating a rejected choice. Both framing and
+metadata budgets remain shared across retries; restoring traversal state never
+refunds work already charged. I/O errors, cancellation and exhausted budgets
+propagate without trying another layout.
+
 The parser permits at most **4,096 candidate selections** and charges candidate
 scan positions plus traversed frame extents against **8 × file size**, including
 retries. Budget exhaustion rejects the file instead of returning a partial

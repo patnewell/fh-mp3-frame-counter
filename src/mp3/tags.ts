@@ -1,6 +1,23 @@
 import { InvalidMp3Error } from "./error.ts";
 import type { FileReader } from "./reader.ts";
 
+const APE_SIGNATURE = "APETAGEX";
+const APE_DESCRIPTOR_BYTES = 32;
+const APE_VERSION_OFFSET = 8;
+const APE_SIZE_OFFSET = 12;
+const APE_FLAGS_OFFSET = 20;
+const APE_RESERVED_OFFSET = 24;
+const APE_VERSION_1 = 1000;
+const APE_VERSION_2 = 2000;
+const APE_HEADER_PRESENT = 0x8000_0000;
+const APE_FOOTER_ABSENT = 0x4000_0000;
+const APE_IS_HEADER = 0x2000_0000;
+const APE_READ_ONLY = 0x0000_0001;
+const APE_DESCRIPTOR_ROLE_MASK = APE_HEADER_PRESENT | APE_FOOTER_ABSENT | APE_IS_HEADER;
+// Buffer flag reads are unsigned; normalize combined flags before comparing them.
+const APE_PAIRED_HEADER_FLAGS = (APE_HEADER_PRESENT | APE_IS_HEADER) >>> 0;
+const APE_ALLOWED_FOOTER_FLAGS = APE_HEADER_PRESENT | APE_READ_ONLY;
+
 /** Owned by one parse, so repeated suffix checks cannot reset their ambiguity allowance. */
 export class MetadataBudget {
   #alternatives = 4096;
@@ -19,7 +36,7 @@ export class MetadataBudget {
 export async function skipLeadingTags(input: FileReader): Promise<number> {
   let offset = 0;
   while (offset < input.size) {
-    const prefix = await input.read(offset, 32);
+    const prefix = await input.read(offset, APE_DESCRIPTOR_BYTES);
     if (startsWith(prefix, "ID3")) {
       const header = prefix.subarray(0, 10);
       const extent = id3Extent(header);
@@ -27,17 +44,20 @@ export async function skipLeadingTags(input: FileReader): Promise<number> {
       if (end > input.size) throw new InvalidMp3Error("Incomplete ID3 payload.");
       if (extent.hasFooter) matchId3Pair(header, await input.read(end - 10, 10));
       offset = end;
-    } else if (startsWith(prefix, "APETAGEX")) {
+    } else if (startsWith(prefix, APE_SIGNATURE)) {
       if (
-        prefix.length !== 32 ||
-        prefix.readUInt32LE(8) !== 2000 ||
-        prefix.readUInt32LE(20) >>> 29 !== 5
+        prefix.length !== APE_DESCRIPTOR_BYTES ||
+        prefix.readUInt32LE(APE_VERSION_OFFSET) !== APE_VERSION_2 ||
+        (prefix.readUInt32LE(APE_FLAGS_OFFSET) & APE_DESCRIPTOR_ROLE_MASK) >>> 0 !==
+          APE_PAIRED_HEADER_FLAGS
       ) {
         throw new InvalidMp3Error("Leading APEv2 requires a header and matching footer.");
       }
-      const end = offset + 32 + prefix.readUInt32LE(12);
-      if (end > input.size || end < offset + 64) throw new InvalidMp3Error("Invalid APE extent.");
-      if ((await apeStart(input, await input.read(end - 32, 32), offset, end)) !== offset) {
+      const end = offset + APE_DESCRIPTOR_BYTES + prefix.readUInt32LE(APE_SIZE_OFFSET);
+      if (end > input.size || end < offset + 2 * APE_DESCRIPTOR_BYTES)
+        throw new InvalidMp3Error("Invalid APE extent.");
+      const footer = await input.read(end - APE_DESCRIPTOR_BYTES, APE_DESCRIPTOR_BYTES);
+      if ((await apeStart(input, footer, offset, end)) !== offset) {
         throw new InvalidMp3Error("APE header and footer lengths disagree.");
       }
       offset = end;
@@ -85,9 +105,9 @@ async function tagStarts(
 ): Promise<{ starts: number[]; malformed: InvalidMp3Error | undefined }> {
   const starts: number[] = [];
   let malformed: InvalidMp3Error | undefined;
-  if (end - boundary >= 32) {
-    const footer = await input.read(end - 32, 32);
-    if (startsWith(footer, "APETAGEX")) {
+  if (end - boundary >= APE_DESCRIPTOR_BYTES) {
+    const footer = await input.read(end - APE_DESCRIPTOR_BYTES, APE_DESCRIPTOR_BYTES);
+    if (startsWith(footer, APE_SIGNATURE)) {
       try {
         starts.push(await apeStart(input, footer, boundary, end));
       } catch (error) {
@@ -152,31 +172,31 @@ async function apeStart(
   boundary: number,
   end: number,
 ): Promise<number> {
-  if (footer.length !== 32 || !startsWith(footer, "APETAGEX"))
+  if (footer.length !== APE_DESCRIPTOR_BYTES || !startsWith(footer, APE_SIGNATURE))
     throw new InvalidMp3Error("Incomplete APE footer.");
-  const version = footer.readUInt32LE(8);
-  const size = footer.readUInt32LE(12);
-  const flags = footer.readUInt32LE(20);
+  const version = footer.readUInt32LE(APE_VERSION_OFFSET);
+  const size = footer.readUInt32LE(APE_SIZE_OFFSET);
+  const flags = footer.readUInt32LE(APE_FLAGS_OFFSET);
   // Only APEv2 defines header-present flags; this service requires zero flags for v1.
-  const paired = version === 2000 && (flags & 0x8000_0000) !== 0;
-  const start = end - size - (paired ? 32 : 0);
+  const paired = version === APE_VERSION_2 && (flags & APE_HEADER_PRESENT) !== 0;
+  const start = end - size - (paired ? APE_DESCRIPTOR_BYTES : 0);
   if (
-    (version !== 1000 && version !== 2000) ||
-    (version === 1000 && flags !== 0) ||
-    size < 32 ||
+    (version !== APE_VERSION_1 && version !== APE_VERSION_2) ||
+    (version === APE_VERSION_1 && flags !== 0) ||
+    size < APE_DESCRIPTOR_BYTES ||
     start < boundary ||
-    (flags & 0x7fff_fffe) !== 0 ||
-    footer.subarray(24).some((byte) => byte !== 0)
+    (flags & ~APE_ALLOWED_FOOTER_FLAGS) !== 0 ||
+    footer.subarray(APE_RESERVED_OFFSET).some((byte) => byte !== 0)
   ) {
     throw new InvalidMp3Error("Invalid APE descriptor or length.");
   }
   if (paired) {
-    const header = await input.read(start, 32);
+    const header = await input.read(start, APE_DESCRIPTOR_BYTES);
     if (
-      header.length !== 32 ||
-      !header.subarray(0, 20).equals(footer.subarray(0, 20)) ||
-      header.readUInt32LE(20) !== (flags | 0x2000_0000) >>> 0 ||
-      !header.subarray(24).equals(footer.subarray(24))
+      header.length !== APE_DESCRIPTOR_BYTES ||
+      !header.subarray(0, APE_FLAGS_OFFSET).equals(footer.subarray(0, APE_FLAGS_OFFSET)) ||
+      header.readUInt32LE(APE_FLAGS_OFFSET) !== (flags | APE_IS_HEADER) >>> 0 ||
+      !header.subarray(APE_RESERVED_OFFSET).equals(footer.subarray(APE_RESERVED_OFFSET))
     ) {
       throw new InvalidMp3Error("APE header and footer disagree.");
     }
