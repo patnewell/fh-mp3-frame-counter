@@ -9,14 +9,22 @@ import { describeUploadError, discardRejectedBody, sendUploadError, UploadError 
 import { beginUpload, type UploadLifetime } from "./lifetime.ts";
 
 interface UploadSettings {
+  /** Deadline from admission, including header validation, counting and rejection cleanup. */
   readonly timeoutMs: number;
 }
 
-/** Tests can replace the counter to control failures and cancellation timing. */
+/** Counter boundary; tests can substitute work with controlled failures or settlement. */
 export interface UploadOperations {
+  /** Consume through file EOF on success and settle all owned work before returning or throwing. */
   count(input: AsyncIterable<Uint8Array>, signal: AbortSignal): Promise<number>;
 }
 
+/**
+ * Register in an encapsulated Fastify scope so upload hooks/error policy stay local.
+ * Admission starts before multipart-header validation; one lifetime owns file processing
+ * and rejected-body cleanup. A count becomes a response only after file, multipart
+ * and HTTP completion. The counter reads directly from the multipart file stream.
+ */
 export function registerUploadRoute(
   app: FastifyInstance,
   settings: UploadSettings,
@@ -27,9 +35,11 @@ export function registerUploadRoute(
     count: countFrames,
     ...overrides,
   };
-  const lifetimes = new WeakMap<FastifyRequest, UploadLifetime>();
+  // Hooks and the handler share request state without extending Fastify's request type.
+  const requestLifetimes = new WeakMap<FastifyRequest, UploadLifetime>();
   app.register(multipart, {
     limits: {
+      // Enforce the request shape in the parser, including parts after a valid file.
       files: 1,
       fields: 0,
       parts: 1,
@@ -38,10 +48,11 @@ export function registerUploadRoute(
       headerPairs: 32,
     },
   });
-  app.addHook("onResponse", async (request) => lifetimes.get(request)?.finish());
+  // Response completion closes the lifetime to new work; pending cleanup still holds capacity.
+  app.addHook("onResponse", async (request) => requestLifetimes.get(request)?.finish());
   app.setErrorHandler(async (error: unknown, request, reply) => {
     const problem = describeUploadError(error);
-    const lifetime = lifetimes.get(request);
+    const lifetime = requestLifetimes.get(request);
     try {
       // The lifetime handles the timeout response or client disconnect.
       if (lifetime?.signal.aborted) return;
@@ -53,6 +64,7 @@ export function registerUploadRoute(
           await bodyDiscarded;
         });
       } else {
+        // Without a lifetime (busy/draining), reject immediately rather than consuming a body.
         sendUploadError(request, reply, problem);
       }
     } finally {
@@ -63,6 +75,7 @@ export function registerUploadRoute(
     "/file-upload",
     {
       onRequest: async (request, reply) => {
+        // Admit before inspecting input so invalid/stalled requests share the same resource bounds.
         const permit = admission.tryAcquire();
         if (!permit) {
           throw new UploadError(
@@ -73,7 +86,7 @@ export function registerUploadRoute(
             true,
           );
         }
-        lifetimes.set(request, beginUpload(request, reply, permit, settings.timeoutMs));
+        requestLifetimes.set(request, beginUpload(request, reply, permit, settings.timeoutMs));
         validateMultipartHeaders(request);
       },
       schema: {
@@ -88,13 +101,15 @@ export function registerUploadRoute(
       },
     },
     async (request, reply) => {
-      const lifetime = lifetimes.get(request);
+      const lifetime = requestLifetimes.get(request);
       if (!lifetime) throw new Error("Upload admission has not been initialized.");
       try {
         const frameCount = await lifetime.run(async () => {
           try {
             return await countUpload(request, operations.count, lifetime.signal);
           } catch (error) {
+            // Expected cancellation is quiet; a different late failure still needs a log,
+            // even if the deadline or disconnect has already made a response impossible.
             const cancelled =
               lifetime.signal.aborted &&
               (error === lifetime.signal.reason ||
@@ -110,9 +125,12 @@ export function registerUploadRoute(
             throw error;
           }
         });
+        // All input and owned stream cleanup have settled; response serialization needs no slot.
         lifetime.finish();
         if (!lifetime.signal.aborted && !reply.sent && !reply.raw.destroyed) return { frameCount };
       } catch (error) {
+        // Let Fastify classify deliverable errors. Otherwise only finish ownership;
+        // the deadline handler or disconnected transport already owns the response outcome.
         if (!lifetime.signal.aborted && !reply.sent && !reply.raw.destroyed) throw error;
         lifetime.finish();
       }
@@ -120,6 +138,7 @@ export function registerUploadRoute(
   );
 }
 
+/** Validate without consuming bytes and normalize the boundary for the multipart dependency. */
 function validateMultipartHeaders(request: FastifyRequest): void {
   const encoding = request.headers["content-encoding"];
   if (encoding !== undefined && encoding.toLowerCase() !== "identity") {
@@ -143,9 +162,10 @@ function validateMultipartHeaders(request: FastifyRequest): void {
   request.headers["content-type"] = `multipart/form-data; boundary="${boundary}"`;
 }
 
+/** Return the file count only after the entire multipart and HTTP body is valid. */
 async function countUpload(
   request: FastifyRequest,
-  count: UploadOperations["count"],
+  countFileFrames: UploadOperations["count"],
   signal: AbortSignal,
 ): Promise<number> {
   signal.throwIfAborted();
@@ -153,13 +173,15 @@ async function countUpload(
   for await (const part of request.parts()) {
     if (part.type !== "file" || part.fieldname !== "file") {
       if (part.type === "file") {
+        // We will not consume a wrongly named file. Close and await it before rejecting.
         const fileClosed = finished(part.file, { cleanup: true }).catch(() => undefined);
         part.file.destroy();
         await fileClosed;
       }
       throw new UploadError(400, "Expected exactly one file field named file.");
     }
-    frameCount = await countFile(part.file, count, signal);
+    frameCount = await countFile(part.file, countFileFrames, signal);
+    // Keep iterating: a later extra part or malformed closing delimiter invalidates the upload.
   }
   // Multipart can end before the HTTP body. Wait for any epilogue before reporting success.
   const bodyComplete = finished(request.raw, {
@@ -176,9 +198,10 @@ async function countUpload(
   return frameCount;
 }
 
+/** Bridge cancellation into stream destruction and retain ownership through parser/stream cleanup. */
 async function countFile(
   file: Readable,
-  count: UploadOperations["count"],
+  countFileFrames: UploadOperations["count"],
   signal: AbortSignal,
 ): Promise<number> {
   const fileFinished = finished(file, { cleanup: true });
@@ -192,7 +215,8 @@ async function countFile(
   if (signal.aborted) cancel();
   try {
     // Await the counter even after cancellation so the lifetime keeps its capacity slot.
-    const frameCount = await count(file, signal);
+    const frameCount = await countFileFrames(file, signal);
+    // Defend the counter boundary: an early result cannot certify an unread file suffix.
     if (!file.readableEnded) throw new Error("The counter returned before file EOF.");
     await fileFinished;
     return frameCount;

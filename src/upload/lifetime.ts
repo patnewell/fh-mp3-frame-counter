@@ -2,17 +2,20 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { UploadPermit } from "./admission.ts";
 import { describeUploadError, sendUploadError, UploadError } from "./error.ts";
 
+/** Request-owned cancellation and accounting for asynchronous work. */
 export interface UploadLifetime {
+  /** Cooperatively cancels work on deadline or disconnect; abort alone does not release capacity. */
   readonly signal: AbortSignal;
-  /** Hold capacity until work settles, including its cleanup. */
+  /** Track work through settlement. The callback must await any stream or other cleanup it starts. */
   run<T>(work: () => Promise<T>): Promise<T>;
   /** Prevent new work and release capacity once pending work settles. Does not cancel work. */
   finish(): void;
 }
 
 /**
- * Deadline and disconnect signal cancellation, but work may still be running.
- * Keep the permit until finish() is called and every run() callback has settled.
+ * Take ownership of an admitted request's permit, deadline and transport listeners.
+ * Releasing capacity requires both finish() and settlement of every run() callback.
+ * This lets a timeout send an error promptly while a slow counter still holds its slot.
  */
 export function beginUpload(
   request: FastifyRequest,
@@ -21,21 +24,21 @@ export function beginUpload(
   timeoutMs: number,
 ): UploadLifetime {
   const controller = new AbortController();
-  let operations = 0;
-  let finishing = false;
+  let pendingOperations = 0;
+  let finishRequested = false;
   let released = false;
 
   function releaseIfIdle(): void {
-    if (!finishing || operations !== 0 || released) return;
+    if (!finishRequested || pendingOperations !== 0 || released) return;
     released = true;
-    clearTimeout(timer);
+    clearTimeout(deadlineTimer);
     request.raw.off("close", requestClosed);
     reply.raw.off("close", responseClosed);
     permit.release();
   }
 
   function finish(): void {
-    finishing = true;
+    finishRequested = true;
     releaseIfIdle();
   }
 
@@ -50,18 +53,21 @@ export function beginUpload(
   }
 
   function responseClosed(): void {
+    // A response that finished writing closed normally; an earlier close is a disconnect.
     if (!reply.raw.writableFinished) disconnect();
   }
 
-  const timer = setTimeout(() => {
+  const deadlineTimer = setTimeout(() => {
     const error = new UploadError(503, "The upload deadline expired.");
     controller.abort(error);
     sendUploadError(request, reply, describeUploadError(error));
     finish();
   }, timeoutMs);
-  timer.unref();
+  // An idle deadline must not keep the process alive after its other work is gone.
+  deadlineTimer.unref();
   request.raw.on("close", requestClosed);
   reply.raw.on("close", responseClosed);
+  // Cover a disconnect that occurred before these listeners were installed.
   if (request.raw.destroyed && !request.raw.complete) disconnect();
   if (reply.raw.destroyed && !reply.raw.writableFinished) disconnect();
 
@@ -69,12 +75,12 @@ export function beginUpload(
     signal: controller.signal,
     async run<T>(work: () => Promise<T>): Promise<T> {
       controller.signal.throwIfAborted();
-      if (finishing) throw new Error("The upload lifetime has already finished.");
-      operations++;
+      if (finishRequested) throw new Error("The upload lifetime has already finished.");
+      pendingOperations++;
       try {
         return await work();
       } finally {
-        operations--;
+        pendingOperations--;
         releaseIfIdle();
       }
     },

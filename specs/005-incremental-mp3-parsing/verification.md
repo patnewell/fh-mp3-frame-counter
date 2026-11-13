@@ -741,6 +741,35 @@ the specification wording, completed task and this record. Heavy resource checks
 Docker and Linux/macOS execution were not rerun. No commit or push was made for
 this correction.
 
+## Upload directory readability (2026-11-13)
+
+Reviewed and documented all four `src/upload/` modules in the uncommitted working
+tree based on `0f1a62789b1a5f32532d7a36105086fa7930a723`, using pinned Node
+**24.22.3** on native Windows. Clarified application/request ownership, immediate
+admission, idempotent permit release, cancellation versus work settlement,
+multipart/HTTP completion, safe error classification and bounded rejected-body
+cleanup. Renamed internal lifecycle state, the deadline timer, request-lifetime
+map, discard callback and counter parameters to describe their roles. Control
+flow, public APIs, response contracts, limits and fixtures are unchanged; no
+acceptance amendment or new regression was needed for these comments and renames.
+Existing edits in `src/config.ts` and `src/server.ts` were left untouched and were
+present during verification.
+
+Applied `review-change` to the complete upload correction and inspected its app
+caller and existing admission, rejection, multipart, lifecycle and compiled-process
+evidence. Followed success, invalid input, overload, deadline, disconnect and
+cleanup paths, including a counter that returns early or settles after timeout.
+No unresolved findings remain. No checks, expectations, coverage exclusions or
+thresholds changed.
+
+`npm.cmd run verify` passed lint, strict typechecking, clean build and coverage:
+**342 passed, zero failed, three expected native Windows POSIX-signal skips**,
+across **19 files**. Overall coverage: **98.16% statements, 95.45% branches,
+100% functions, 99.58% lines**; upload coverage includes **100% lines and
+functions**. `git diff --check` also passed. For this upload cleanup, only this
+evidence entry was added after the full gate. Heavy resource checks, Docker and Linux/macOS execution
+were not rerun. No commit or push was made for this cleanup.
+
 ## Server readability cleanup (2026-11-13)
 
 Reviewed `src/server.ts` and its application, configuration, admission and
