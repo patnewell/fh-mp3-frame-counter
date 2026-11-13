@@ -740,3 +740,29 @@ branches, 100% functions, 99.58% lines**. Final edits after this gate update onl
 the specification wording, completed task and this record. Heavy resource checks,
 Docker and Linux/macOS execution were not rerun. No commit or push was made for
 this correction.
+
+## Server readability cleanup (2026-11-13)
+
+Reviewed `src/server.ts` and its application, configuration, admission and
+compiled-process callers in the uncommitted working tree based on
+`0f1a62789b1a5f32532d7a36105086fa7930a723`, using pinned Node **24.22.3** on
+native Windows. Named the one-second shutdown settlement allowance, clarified
+signal-handler/state/timer names and used consistent named local functions.
+Comments now explain when `runServer` resolves, asynchronous signal handling,
+repeated-signal behavior, referenced deadlines, socket-triggered cancellation,
+actual bound-port reporting and preservation of the original startup error.
+
+Applied `review-change` to the complete maintenance diff and relevant lifecycle
+contracts. Startup success/failure, graceful close, forced cancellation, final
+exit timing and handler/timer cleanup retain their behavior. No unresolved
+findings remain. This server cleanup changes no specification, test, fixture,
+logging policy, configuration, coverage threshold, exclusion or deployment
+setting; existing functional tests cover the preserved behavior. Concurrent
+`src/config.ts` edits and their separate verification record were left untouched.
+
+`npm.cmd run verify` passed lint, strict typecheck, clean build and coverage:
+**342 passed, zero failed, three expected native Windows POSIX-signal skips**,
+across **19 files**. Coverage: **98.16% statements, 95.45% branches, 100%
+functions, 99.58% lines**. Final edits after the gate add one explanatory comment
+and this record. Real POSIX signal delivery, Docker and heavy resource checks
+were not rerun. No commit or push was made for this cleanup.
