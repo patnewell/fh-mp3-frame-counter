@@ -19,3 +19,7 @@
 ## File-size policy correction
 
 - [x] [T05] Establish a failing lazy HTTP upload above the former 100 MiB cap, remove total file-byte configuration/enforcement and resource-check size overrides, retain concurrency/deadlines/structural limits and invalid-media recovery, comment the active-upload count as a Kubernetes HPA custom metric, update current docs, review the full correction and record actual full-gate/native-resource results.
+
+## Configuration simplification
+
+- [x] [T06] Establish failing standard-coercion regressions, replace custom configuration validation with pinned `env-schema` and shared declarative constraints, preserve defaults/isolation/startup privacy, update affected tests and current docs, review the complete correction and record the full gate's actual results.

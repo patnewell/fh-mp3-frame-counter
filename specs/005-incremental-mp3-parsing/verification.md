@@ -273,3 +273,54 @@ test input, not production throughput or a universal memory guarantee.
 `spawn docker ENOENT`. No container ran. Other-platform and hosted checks were
 not executed; earlier qualified evidence remains historical. These measurements
 were taken from the uncommitted correction. No push was performed.
+
+## Schema-based configuration (2026-11-13)
+
+Tested base `9de05f879d4e5013090a54a021dce6ed8bb5d026` plus the working-tree
+S17 correction, on native Windows x64 / Node 24.22.3. Added production dependency
+`env-schema` 8.0.1 with its lockfile entry; existing dependency versions did not
+change. Both environment and programmatic configuration use typed JSON schemas
+with shared properties. The custom decimal, range, host and log-level validation
+helpers are removed; `AppOptions` derives from `Partial<AppSettings>`.
+
+Defaults, immutable results, pre-Fastify configuration and standalone healthcheck
+reuse remain. `env: false` prevents the library from merging ambient process
+values with explicit data. Numeric values use normal coercion, while declared
+port/admission/timer ranges and log levels remain. Host interpretation belongs
+to the listener, with only a nonempty string constraint in the schema.
+
+Four accepted-coercion cases (`+1`, `1e3`, leading/trailing whitespace) failed
+against the custom decimal parser before implementation and now pass. Their
+former rejection expectations became acceptance checks. Two bespoke host
+rejection cases were removed under the explicit S17 policy; the empty-host case
+remains. Tests now expect the library's errors instead of custom messages or
+`RangeError`. Compiled startup tests continue to prove private invalid values
+are absent from output. An added ambient-environment isolation regression and
+three non-finite admission/timer cases bring the configuration file to 33 tests
+and the full suite from 334 to 336 passing cases.
+
+Qualification reproduced an actual dependency issue: Ajv 8.20.0 coerces
+`Infinity` / `-Infinity` strings into non-finite values and bypasses ordinary
+numeric bounds. This matches upstream
+[ajv-validator/ajv#2626](https://github.com/ajv-validator/ajv/pull/2626).
+The retained infinity-port test initially failed. One shared declarative `allOf`
+integer check closes that gap for all numeric configuration without custom
+validators, custom Ajv options or dependency patches. The focused configuration
+and application-error run then passed **57 tests**.
+
+Self-review with `review-change` inspected the full diff, shared schema/type
+consistency, coercion and bounds, environment isolation, immutable input/output,
+startup/logging/healthcheck callers, Docker production dependency installation
+and intentional assertion changes. The non-finite coercion finding is resolved;
+no review findings remain. Parser, upload/concurrency/deadline lifetimes, fixture
+oracles, gates and coverage exclusions are unchanged.
+
+`npm.cmd run verify` passed lint, strict typecheck, clean build and coverage:
+**336 passed, zero failed, three expected native Windows POSIX-signal skips**,
+across 20 files. Coverage: **95.54% statements**, **93.26% branches**,
+**97.59% functions**, **97.47% lines**. Existing compiled-process startup,
+configuration-failure privacy, probes and real-HTTP regressions passed, including
+the lazy upload above the former 100 MiB cap. `git diff --check` passed.
+Resource/container/other-platform checks were not rerun for this configuration
+correction; the prior Docker-unavailable qualification remains. Tests were run
+on the uncommitted correction; no push was performed.

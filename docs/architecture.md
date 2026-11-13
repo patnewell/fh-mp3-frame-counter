@@ -113,17 +113,19 @@ blocked JavaScript or an uninterruptible external operation.
 
 ## Runtime and deployment
 
-Configuration is frozen and passed explicitly. Only process entrypoints read
-environment values or register signals. Readiness reflects accepting work;
-temporary upload saturation leaves the replica ready. Liveness reflects a
+Configuration uses shared `env-schema` definitions, is frozen and passed
+explicitly. It is resolved before creating Fastify so the logger and standalone
+healthcheck use the same policy. Only process entrypoints read environment values
+or register signals. Readiness reflects accepting work; temporary upload saturation
+leaves the replica ready. Liveness reflects a
 responding process. No filesystem or replacement dependency is probed.
 
 Generated request IDs and fixed route/event/category values support diagnosis.
 The logger reconstructs safe events through the root logger so arbitrary objects,
 exception text and child bindings cannot introduce private context.
 
-Keep Node 24.22.3, TypeScript 7.0.2, Fastify/multipart, Vitest and Biome at the
-pinned versions for this feature. Strict NodeNext/ESM checking remains distinct
+Keep Node 24.22.3, TypeScript 7.0.2, Fastify/multipart, env-schema, Vitest and Biome
+at the pinned versions for this feature. Strict NodeNext/ESM checking remains distinct
 from native development type stripping; production executes compiled JavaScript.
 The Linux image and launch commands retain non-root execution, a read-only root
 and explicit resource/security limits, with no writable upload mount.

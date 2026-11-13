@@ -132,3 +132,21 @@ Remove size overrides from both resource-check modes; retain independent counts
 and memory observations. Keep earlier measurements intact, update current docs,
 comment the active-upload count for future Kubernetes HPA integration, and use
 `review-change` plus the complete gate and native resource check for evidence.
+
+## Configuration simplification (2026-11-13)
+
+Use pinned `env-schema` directly so configuration remains available before
+Fastify/logger construction and to the standalone healthcheck. Replace handwritten
+parsing/range/log-level helpers with typed JSON schemas and the library's default
+coercion. Reuse the application property schema in runtime configuration and keep
+small entrypoint mappings for uppercase environment names. Pass `env: false`
+with explicit data to prevent ambient environment merging. Preserve freezing,
+defaults and fixed startup-failure output. Amend numeric/coercion/host/error tests
+for S17, add an isolation regression, retain all unrelated runtime/lifecycle
+checks, update current operations docs, then review and run the full gate.
+
+During qualification, Ajv 8.20.0 accepted strings coercing to infinity despite
+numeric bounds (upstream ajv-validator/ajv#2626). A shared JSON Schema `allOf`
+integer check rejects non-finite coercion results without handwritten validation
+or a dependency patch. Preserve the existing infinity-port rejection and cover
+both timers and admission as well.

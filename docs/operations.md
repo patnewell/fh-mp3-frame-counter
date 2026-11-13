@@ -7,22 +7,26 @@ separates actual checks/measurements from supplied but unexecuted checks.
 
 ## Configuration
 
-`readConfig` validates and freezes primitive settings at startup. Programmatic
-app construction shares that policy and defaults to silent logging. Only process
-entrypoints read environment values. A `.env` file is not loaded automatically.
+`readConfig` uses Fastify's `env-schema` library for defaults, conversion and
+validation, then freezes the resolved settings. Programmatic app construction
+shares the schema and defaults to silent logging. Only process entrypoints read
+environment values; explicit configuration is isolated from the ambient
+environment. A `.env` file is not loaded automatically.
 
 | Variable             | Default                      | Accepted meaning                                                                   |
 | -------------------- | ---------------------------- | ---------------------------------------------------------------------------------- |
-| `HOST`               | `127.0.0.1`; image `0.0.0.0` | Nonblank, NUL-free host/address; Node must bind it                                 |
-| `PORT`               | `3000`                       | Decimal 0–65535; zero selects an ephemeral server port, but probes require nonzero |
+| `HOST`               | `127.0.0.1`; image `0.0.0.0` | Nonempty host/address string; Node must bind it                                    |
+| `PORT`               | `3000`                       | Integer 0–65535; zero selects an ephemeral server port, but probes require nonzero |
 | `MAX_UPLOADS`        | `4`                          | Positive safe integer; local admitted upload count                                 |
-| `REQUEST_TIMEOUT_MS` | `30000`                      | Decimal 1–2147483647; admission through processing                                 |
-| `SHUTDOWN_GRACE_MS`  | `10000`                      | Decimal 1–2147483647; drain before forced connection cancellation                  |
+| `REQUEST_TIMEOUT_MS` | `30000`                      | Integer 1–2147483647; admission through processing                                 |
+| `SHUTDOWN_GRACE_MS`  | `10000`                      | Integer 1–2147483647; drain before forced connection cancellation                  |
 | `LOG_LEVEL`          | `info`                       | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`                     |
 
-Signs, whitespace, fractions, exponent notation and unsafe integers are rejected.
-Validation ranges are not recommended production budgets. Concurrency and
-deadlines must fit measured workload and memory. There is no application file-size
+Normal schema coercion accepts numeric strings such as `+1`, `1e3` and ` 3000`
+when their converted values are integers within range. Fractional, non-finite
+and out-of-range values are rejected. Validation ranges are not recommended
+production budgets. Concurrency and deadlines must fit measured workload and
+memory. There is no application file-size
 cap; `MAX_FILE_BYTES` has been removed and no longer affects configuration.
 `UPLOAD_TEMP_DIR` was removed in 005: uploads have no filesystem staging or storage
 dependency.

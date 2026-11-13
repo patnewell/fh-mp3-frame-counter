@@ -95,6 +95,21 @@ cap; document the active-upload count as the preferred per-pod custom metric for
 a Kubernetes HPA, targeting below the cap to scale before saturation. This comment
 does not add metric publication or deployment configuration.
 
+## Configuration simplification amendment (2026-11-13)
+
+**S17:** Replace custom environment parsing and validation with Fastify's
+`env-schema` library. Use its standard coercion and schema errors, including
+accepting signed, exponent and whitespace-padded numeric strings when they
+represent an integer within the configured range. Declare only defaults, types,
+log levels and the ranges needed by ports, timers and admission. Delegate host
+interpretation to the listener, keeping only a nonempty string requirement.
+Keep existing defaults, immutable resolved settings and isolated programmatic
+configuration; supplied environment data must not merge with ambient process
+values. Continue resolving configuration before constructing Fastify and reuse
+it in the standalone healthcheck. Do not load `.env` automatically or expose
+validation details in process startup failures. This supersedes 004 O01's
+strict-decimal and custom-host validation policy; historical evidence is unchanged.
+
 ## Acceptance scenarios and evidence
 
 Test every header split, one-byte/varied chunks, multiple frames per chunk,

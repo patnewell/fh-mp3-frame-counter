@@ -1,22 +1,7 @@
+import envSchema, { type JSONSchemaType } from "env-schema";
 import type { LogLevel } from "fastify";
 
 export type { LogLevel } from "fastify";
-
-const logLevels = [
-  "fatal",
-  "error",
-  "warn",
-  "info",
-  "debug",
-  "trace",
-  "silent",
-] as const satisfies readonly LogLevel[];
-
-export interface AppOptions {
-  readonly maxUploads?: number;
-  readonly timeoutMs?: number;
-  readonly logLevel?: LogLevel;
-}
 
 export interface AppSettings {
   readonly maxUploads: number;
@@ -24,65 +9,61 @@ export interface AppSettings {
   readonly logLevel: LogLevel;
 }
 
+export type AppOptions = Partial<AppSettings>;
+
 export interface RuntimeConfig extends AppSettings {
   readonly host: string;
   readonly port: number;
   readonly shutdownGraceMs: number;
 }
 
-/** Programmatic and environment configuration share the same range policy. */
+// Recheck coerced integers to reject Infinity until ajv-validator/ajv#2626 is fixed.
+const integer = { type: "integer", allOf: [{ type: "integer" }] } as const;
+
+const appSchema = {
+  type: "object",
+  required: ["maxUploads", "timeoutMs", "logLevel"],
+  properties: {
+    maxUploads: { ...integer, minimum: 1, maximum: Number.MAX_SAFE_INTEGER, default: 4 },
+    timeoutMs: { ...integer, minimum: 1, maximum: 2_147_483_647, default: 30_000 },
+    logLevel: {
+      type: "string",
+      enum: ["fatal", "error", "warn", "info", "debug", "trace", "silent"] satisfies LogLevel[],
+      default: "silent",
+    },
+  },
+} satisfies JSONSchemaType<AppSettings>;
+
+const runtimeSchema = {
+  type: "object",
+  required: [...appSchema.required, "host", "port", "shutdownGraceMs"],
+  properties: {
+    ...appSchema.properties,
+    logLevel: { ...appSchema.properties.logLevel, default: "info" },
+    host: { type: "string", minLength: 1, default: "127.0.0.1" },
+    port: { ...integer, minimum: 0, maximum: 65_535, default: 3000 },
+    shutdownGraceMs: { ...integer, minimum: 1, maximum: 2_147_483_647, default: 10_000 },
+  },
+} satisfies JSONSchemaType<RuntimeConfig>;
+
 export function resolveAppSettings(options: AppOptions = {}): AppSettings {
-  return Object.freeze({
-    maxUploads: integer(options.maxUploads ?? 4, "MAX_UPLOADS"),
-    timeoutMs: integer(options.timeoutMs ?? 30_000, "REQUEST_TIMEOUT_MS", 1, 2_147_483_647),
-    logLevel: logLevel(options.logLevel ?? "silent"),
-  });
+  return Object.freeze(envSchema<AppSettings>({ schema: appSchema, data: options, env: false }));
 }
 
-/** Only process entrypoints supply environment values; no supplied value enters an error message. */
+/** Explicit data keeps application construction independent of the ambient environment. */
 export function readConfig(environment: Readonly<NodeJS.ProcessEnv>): RuntimeConfig {
-  const defaults = resolveAppSettings();
-  const host = environment.HOST ?? "127.0.0.1";
-  if (!host.trim() || host.includes("\0")) {
-    throw new Error("HOST must be nonblank and contain no NUL bytes.");
-  }
-  return Object.freeze({
-    ...resolveAppSettings({
-      maxUploads: decimal(environment.MAX_UPLOADS, "MAX_UPLOADS", defaults.maxUploads),
-      timeoutMs: decimal(environment.REQUEST_TIMEOUT_MS, "REQUEST_TIMEOUT_MS", defaults.timeoutMs),
-      logLevel: logLevel(environment.LOG_LEVEL ?? "info"),
+  return Object.freeze(
+    envSchema<RuntimeConfig>({
+      schema: runtimeSchema,
+      env: false,
+      data: {
+        host: environment.HOST,
+        port: environment.PORT,
+        maxUploads: environment.MAX_UPLOADS,
+        timeoutMs: environment.REQUEST_TIMEOUT_MS,
+        shutdownGraceMs: environment.SHUTDOWN_GRACE_MS,
+        logLevel: environment.LOG_LEVEL,
+      },
     }),
-    host,
-    port: integer(decimal(environment.PORT, "PORT", 3000), "PORT", 0, 65_535),
-    shutdownGraceMs: integer(
-      decimal(environment.SHUTDOWN_GRACE_MS, "SHUTDOWN_GRACE_MS", 10_000),
-      "SHUTDOWN_GRACE_MS",
-      1,
-      2_147_483_647,
-    ),
-  });
-}
-
-function decimal(value: string | undefined, name: string, fallback: number): number {
-  if (value === undefined) return fallback;
-  if (!/^\d+$/.test(value)) throw new RangeError(`${name} must be a decimal integer.`);
-  return Number(value);
-}
-
-function integer(
-  value: number,
-  name: string,
-  minimum = 1,
-  maximum = Number.MAX_SAFE_INTEGER,
-): number {
-  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
-    throw new RangeError(`${name} must be an integer between ${minimum} and ${maximum}.`);
-  }
-  return value;
-}
-
-function logLevel(value: string): LogLevel {
-  const level = logLevels.find((candidate) => candidate === value);
-  if (level === undefined) throw new Error("LOG_LEVEL must be a supported logging level.");
-  return level;
+  );
 }
