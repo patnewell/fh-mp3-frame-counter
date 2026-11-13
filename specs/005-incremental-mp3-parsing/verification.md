@@ -701,3 +701,42 @@ lifecycle, compiled-process and configuration tests with seed **20261113** passe
 after the full gate only add this record. Heavy resource checks, Docker and
 other-platform execution were not rerun; the existing platform qualifications
 remain. No commit or push was made.
+
+## Logging scope correction (2026-11-13)
+
+Implemented S19 in the uncommitted working tree based on
+`ea4f684e2fc6f8c3cd31d889d47ee50bfbd932cb`, with pinned Node **24.22.3** on
+native Windows. Removed 004 O04, the log-content invariant in `AGENTS.md`,
+startup-error redaction, and `src/logging.ts`. Fastify now uses its standard
+Pino logger and request logging at the configured level. Native logger calls
+retain startup/shutdown and unexpected upload-failure events, including error
+details where available. Current architecture, operations and testing docs agree
+with the unrestricted logging policy; earlier verification remains historical.
+
+Intentional check changes: deleted the 26-case logging unit suite and the compiled
+trace-privacy case. Removed privacy-only assertions from startup validation,
+malformed multipart and late parser-failure cases while retaining their functional
+assertions. Removed the obsolete deleted-module import restriction and its harness
+case; parser independence rules for existing modules remain. No fixture, coverage
+threshold, coverage exclusion or platform skip changed.
+
+Applied `review-change` to the complete correction, including affected callers,
+checks, specs and current guidance. Startup errors, normal HTTP handling, invalid
+multipart, cancellation, late failures, overload and shutdown ownership retain
+their functional contracts. Process/resource observers still receive the actual
+bound port through `server_started`. No unresolved findings remain.
+
+A source-level smoke command logged an arbitrary message with extra fields and
+a child logger with an error: before the change it emitted no records; afterward
+both records included their message, extra fields, child context and exception
+details. A compiled-app HTTP smoke returned 200 and emitted standard request and
+completion logs, including the raw query string and generated request ID.
+
+The first full-gate attempt stopped on formatting in changed files. After applying
+the configured formatter, `npm.cmd run verify` passed lint, strict typecheck,
+clean build and coverage: **342 passed, zero failed, three expected native Windows
+POSIX-signal skips**, across **19 files**. Coverage: **98.16% statements, 95.45%
+branches, 100% functions, 99.58% lines**. Final edits after this gate update only
+the specification wording, completed task and this record. Heavy resource checks,
+Docker and Linux/macOS execution were not rerun. No commit or push was made for
+this correction.

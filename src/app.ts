@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import Fastify, { type FastifyBaseLogger, type FastifyInstance, LogController } from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import { type AppOptions, resolveAppSettings } from "./config.ts";
-import { logEvent, loggingOptions, requestRoute } from "./logging.ts";
 import { UploadAdmission } from "./upload/admission.ts";
 import { registerUploadRoute, type UploadOperations } from "./upload/route.ts";
 
@@ -19,10 +18,8 @@ export function createApp(
 ): Application {
   const settings = resolveAppSettings(options);
   const admission = new UploadAdmission(settings.maxUploads);
-  let rootLogger: FastifyBaseLogger | undefined;
   const app = Fastify({
-    logger: loggingOptions(settings.logLevel, () => rootLogger),
-    logController: new LogController({ disableRequestLogging: true }),
+    logger: { level: settings.logLevel },
     requestIdHeader: false,
     genReqId: () => randomUUID(),
     requestTimeout: 0,
@@ -30,18 +27,8 @@ export function createApp(
     return503OnClosing: false,
     forceCloseConnections: "idle",
   });
-  rootLogger = app.log;
   app.addHook("onRequest", async (request, reply) => {
     reply.header("x-request-id", request.id);
-  });
-  app.addHook("onResponse", async (request, reply) => {
-    logEvent(request.log, {
-      event: "request_completed",
-      requestId: request.id,
-      route: requestRoute(request.routeOptions.url),
-      statusCode: reply.statusCode,
-      elapsedMs: Math.max(0, Math.round(reply.elapsedTime)),
-    });
   });
   app.addHook("preClose", async () => admission.stop());
   app.addHook("onClose", async () => admission.drained());

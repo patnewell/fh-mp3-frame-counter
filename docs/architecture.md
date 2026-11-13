@@ -24,7 +24,6 @@ only measures memory.
 | ------------------------- | ---------------------------------------------------------------------------- |
 | `src/app.ts`              | Construct Fastify, application admission, health routes and close barrier    |
 | `src/config.ts`           | Validate and freeze programmatic/runtime settings                            |
-| `src/logging.ts`          | Serialize allowlisted events through the root logger                         |
 | `src/server.ts`           | Bind the executable and own bounded signal-driven shutdown                   |
 | `src/healthcheck.ts`      | Probe readiness with an absolute deadline and silent exit status             |
 | `src/upload/route.ts`     | Validate transport, stream/count the file and await complete input           |
@@ -121,9 +120,9 @@ healthcheck use the same policy. Only process entrypoints read environment value
 or register signals. Readiness reflects accepting work; temporary upload saturation
 leaves the replica ready. Liveness reflects a responding process.
 
-Generated request IDs and fixed route/event/category values support diagnosis.
-The logger reconstructs safe events through the root logger so arbitrary objects,
-exception text and child bindings cannot introduce private context.
+Fastify's standard Pino logger handles requests and application events at the
+configured log level. Generated request IDs support diagnosis. Application code
+can log messages, objects, errors and child context without a content filter.
 
 The runtime dependencies are Fastify, `@fastify/multipart` and `env-schema`.
 Versions are pinned in `package.json` and the lockfile; `.nvmrc` pins Node.

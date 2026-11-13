@@ -6,12 +6,12 @@ the owning capability. Load only documentation relevant to the change.
 
 ## Work map
 
-| Change                          | Owner                                                                    | Evidence                                            |
-| ------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------- |
-| MPEG framing and metadata       | `src/mp3/`                                                               | Stream/chunk tests and real fixture identities      |
-| Multipart and request resources | `src/upload/`, `src/app.ts`                                              | Real HTTP and ownership/cancellation tests          |
-| Runtime, probes and shutdown    | `src/config.ts`, `src/logging.ts`, `src/server.ts`, `src/healthcheck.ts` | Compiled process and container tests                |
-| Agent/build policy              | `biome.json`, `.agents/`, `.codex/`, `.github/`                          | Executable harness tests and a complete diff review |
+| Change                          | Owner                                                  | Evidence                                            |
+| ------------------------------- | ------------------------------------------------------ | --------------------------------------------------- |
+| MPEG framing and metadata       | `src/mp3/`                                             | Stream/chunk tests and real fixture identities      |
+| Multipart and request resources | `src/upload/`, `src/app.ts`                            | Real HTTP and ownership/cancellation tests          |
+| Runtime, probes and shutdown    | `src/config.ts`, `src/server.ts`, `src/healthcheck.ts` | Compiled process and container tests                |
+| Agent/build policy              | `biome.json`, `.agents/`, `.codex/`, `.github/`        | Executable harness tests and a complete diff review |
 
 ## Commands at the repository root
 
@@ -51,7 +51,6 @@ Use separate worktrees for concurrent features; each has its own feature pointer
 - Derive fixture expectations independently; preserve the supplied sample bytes.
 - Keep mutable state request/app-owned and retain capacity until work settles.
 - Bound memory, work, bytes and elapsed time; explain ingress responsibilities.
-- Exclude uploaded content, filenames, headers, raw URLs and paths from logs.
 - Prefer direct typed code; comment ownership and non-obvious format decisions.
 - Preserve checks and fixtures when fixing failures. Review any intentional gate
   change explicitly; instructions do not enforce runtime or hosted permissions.

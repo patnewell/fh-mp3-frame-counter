@@ -28,11 +28,10 @@ the readiness response completes successfully.
 
 ## Observable process lifecycle
 
-Centralize the log serialization policy in small `src/logging.ts`. Use Fastify's
-existing Pino integration and supported `LogController`, generated UUID request IDs
-and typed allowlisted fields/events. Drop arbitrary messages, error/request/reply
-objects and unsafe child bindings. Emit safe operational failures even after
-timeout/disconnect; do not add another logging framework.
+Use Fastify's existing Pino integration, generated UUID request IDs and configured
+log level. Emit operational failures even after timeout/disconnect. Per the
+2026-11-13 correction (005 S19), remove the former `src/logging.ts` serialization
+policy and its privacy tests; messages, objects and child bindings are unrestricted.
 
 Keep signal/shutdown ownership in `server.ts`. The first termination signal stops
 admission and begins `app.close()`. After the grace period, close active sockets
@@ -69,7 +68,7 @@ hosted protections remain a maintainer setup task, not a claimed repository feat
 ## Verification and documents
 
 Use shared config/probe tests first, then independent compiled-process tests from
-an unrelated path with spaces. Exercise original sample, trace privacy, malformed
+an unrelated path with spaces. Exercise original sample, malformed
 multipart, absolute probe deadlines, graceful drain, forced cancellation and final
 exit bounds. Label Windows signal limitations; preserve prior tests and fixtures.
 

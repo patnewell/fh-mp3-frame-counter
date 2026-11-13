@@ -103,9 +103,7 @@ Docker launch/smoke stop timeout is 15 seconds. Increase it when increasing
 `SHUTDOWN_GRACE_MS`, allowing the final bound and scheduling margin. A native
 Windows child-process kill is not POSIX graceful-shutdown evidence.
 
-Generated request IDs and fixed event/route values support diagnosis. Events
-cover startup, request completion, unexpected processing failures and shutdown.
-Uploaded bytes, filenames, headers, raw URLs/queries, paths, exception messages
-and arbitrary child context
-are excluded even at trace level. Correlate safe events and resource observations,
-then reproduce failures with nonprivate inputs.
+Fastify's standard Pino logger records requests at the configured `LOG_LEVEL`.
+Application events cover startup, unexpected processing failures and shutdown;
+generated request IDs support correlation. Messages, objects, exception details
+and child logger context are unrestricted by application policy.

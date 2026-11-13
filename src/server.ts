@@ -1,6 +1,5 @@
 import { type Application, createApp } from "./app.ts";
 import { type RuntimeConfig, readConfig } from "./config.ts";
-import { logEvent } from "./logging.ts";
 
 /** Start the real listener and one process-owned shutdown sequence. */
 export async function runServer(
@@ -17,7 +16,7 @@ export async function runServer(
     if (stopping) return;
     stopping = true;
     admission.stop();
-    logEvent(app.log, { event: "shutdown_started", activeUploads: admission.active });
+    app.log.info({ event: "shutdown_started", activeUploads: admission.active });
     void shutdown();
   }
 
@@ -25,9 +24,9 @@ export async function runServer(
     let finalTimer: NodeJS.Timeout | undefined;
     // Both timers remain referenced: an unsettled parser promise alone cannot keep Node alive.
     const graceTimer = setTimeout(() => {
-      logEvent(app.log, { event: "shutdown_forced", activeUploads: admission.active });
+      app.log.warn({ event: "shutdown_forced", activeUploads: admission.active });
       finalTimer = setTimeout(() => {
-        logEvent(app.log, { event: "shutdown_failed" });
+        app.log.error({ event: "shutdown_failed" });
         process.exit(1);
       }, 1000);
       // Closing active responses invokes the existing request cancellation and stream release paths.
@@ -35,10 +34,10 @@ export async function runServer(
     }, config.shutdownGraceMs);
     try {
       await app.close();
-      logEvent(app.log, { event: "server_stopped" });
+      app.log.info({ event: "server_stopped" });
       process.exitCode = 0;
-    } catch {
-      logEvent(app.log, { event: "shutdown_failed" });
+    } catch (error) {
+      app.log.error({ event: "shutdown_failed", err: error });
       process.exit(1);
     } finally {
       clearTimeout(graceTimer);
@@ -55,7 +54,7 @@ export async function runServer(
     if (address === null || typeof address === "string") {
       throw new Error("The service has no TCP listening address.");
     }
-    logEvent(app.log, { event: "server_started", port: address.port });
+    app.log.info({ event: "server_started", port: address.port });
   } catch (error) {
     removeSignals();
     await app.close().catch(() => undefined);
@@ -67,9 +66,9 @@ if (import.meta.main) {
   try {
     const config = readConfig(process.env);
     await runServer(createApp(config), config);
-  } catch {
-    // Configuration can fail before a logger exists; this fixed record contains no supplied values.
-    process.stderr.write('{"event":"startup_failed"}\n');
+  } catch (error) {
+    // Configuration can fail before the application logger exists.
+    process.stderr.write(`${JSON.stringify({ event: "startup_failed", error: String(error) })}\n`);
     process.exitCode = 1;
   }
 }

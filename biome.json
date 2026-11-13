@@ -34,8 +34,6 @@
                       "**/app.js",
                       "**/config.ts",
                       "**/config.js",
-                      "**/logging.ts",
-                      "**/logging.js",
                       "**/healthcheck.ts",
                       "**/healthcheck.js",
                       "**/server.ts",

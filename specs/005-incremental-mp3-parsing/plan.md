@@ -192,3 +192,15 @@ Align free-format candidate/limit names with the clarified concepts; leave the
 shared error module unchanged. Preserve fixtures, accepted/rejected layouts,
 limits, buffering, yielding and cancellation. Use existing parser/fixture checks,
 independent diff review and the full gate; record actual results and dispositions.
+
+## Logging scope correction (2026-11-13)
+
+For S19, remove `src/logging.ts` and its dedicated unit tests. Configure Fastify's
+standard logger directly and use its normal request logging. Replace helper calls
+with native info/warn/error calls, retaining process-observation events and logging
+actual processing/shutdown errors. Include configuration/listen failure details
+in the pre-logger startup record. Remove the compiled privacy case and privacy-only
+assertions while keeping startup validation, malformed transport, late failures
+and shutdown regressions. Remove obsolete import-policy entries for the deleted
+module, update current guidance/docs and the superseded 004 requirement, preserve
+historical verification, review the complete diff and run the full gate.

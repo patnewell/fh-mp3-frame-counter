@@ -3,7 +3,6 @@ import { finished } from "node:stream/promises";
 import { MIMEType } from "node:util";
 import multipart from "@fastify/multipart";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { logEvent } from "../logging.ts";
 import { countFrames } from "../mp3/count.ts";
 import type { UploadAdmission } from "./admission.ts";
 import { describeUploadError, discardRejectedBody, sendUploadError, UploadError } from "./error.ts";
@@ -101,10 +100,11 @@ export function registerUploadRoute(
               (error === lifetime.signal.reason ||
                 (error instanceof Error && error.name === "AbortError"));
             if (!cancelled && describeUploadError(error).status === 500) {
-              logEvent(request.log, {
+              request.log.error({
                 event: "upload_failed",
                 requestId: request.id,
                 category: "processing",
+                err: error,
               });
             }
             throw error;

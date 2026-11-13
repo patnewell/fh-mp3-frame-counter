@@ -24,7 +24,7 @@ Earlier specifications and execution evidence remain historical.
 | S09 | Bound synchronous progress: yield to the event loop at least every 64 KiB consumed/searched, including a large producer chunk or many tiny chunks. Check cancellation before pulling input and during work; release the upstream iterator on completion/error. Retained fragments own their bytes rather than pinning prior producer buffers. A borrowed current producer chunk is additional input memory, not accumulated parser storage.  |
 | S10 | Pass the multipart file stream directly to the counter. Preserve exactly one file field `file`, encoding/type/boundary validation, file/part/field count limits, malformed/truncated media detection, safe JSON errors, rejection byte bounds, disconnects and deadlines. Per S16 there is no application file-size cap; defaults remain four concurrent uploads and 30 seconds.                                                             |
 | S11 | Capacity remains occupied until owned file-stream/parser/rejection work settles, even after an early error/deadline/disconnect. Hold application close/drain for pending work. Preserve busy/draining retry headers, graceful signal draining, forced cancellation and final shutdown bound.                                                                                                                                                 |
-| S12 | Remove upload files/directories, seek infrastructure, disposal seams, `UPLOAD_TEMP_DIR`, storage probes, orphan policies and cleanup log categories. Readiness reflects accepting work; saturation alone remains ready. Preserve private allowlisted logs and liveness.                                                                                                                                                                      |
+| S12 | Remove upload files/directories, seek infrastructure, disposal seams, `UPLOAD_TEMP_DIR`, storage probes, orphan policies and cleanup log categories. Readiness reflects accepting work; saturation alone remains ready. Preserve liveness.                                                                                                                                                                                                   |
 | S13 | Container runs non-root with a read-only root and no upload mount/tmpfs. Preserve CPU/memory/PID/security/probe/stop restrictions. Supply a separate executable lazy large-upload resource check with independent expected counts and server RSS observations; where Docker is available enforce 256 MiB memory and send more than that budget. Do not claim blocked container checks or heap-only observations prove total-memory behavior. |
 | S14 | Keep TypeScript, pinned tooling, existing coverage thresholds/exclusions, fixture identities and unrelated regressions. Replace obsolete storage/seek tests with stream ownership, chunk-boundary and resource regressions and record why each family changed. Update current docs and commit the genuine Lean sequence locally; do not push or rewrite history/tags.                                                                        |
 
@@ -43,7 +43,7 @@ Earlier specifications and execution evidence remain historical.
 | 003 U03/U04/U06/U08          | Preserve cancellation, bounded rejection and settled-work admission/close ownership for streams instead of disposal.                                                                                               |
 | 003 U05                      | Superseded by S04: parse before HTTP completion, publish success only after full validation.                                                                                                                       |
 | 003 U07; 004 O03             | Upload storage and filesystem readiness are removed; independent requests and safe failures remain.                                                                                                                |
-| 004 O04/O05/O06/O07          | Preserve privacy, probes, compiled process behavior and bounded shutdown; replace storage-specific fixtures with held/failed parser work.                                                                          |
+| 004 O05/O06/O07              | Preserve probes, compiled process behavior and bounded shutdown; replace storage-specific fixtures with held/failed parser work.                                                                                   |
 | 004 O08/O09                  | Same compiled/non-root/read-only deployment without writable upload storage. Container resource test supplies the new memory evidence.                                                                             |
 
 ## Explicit examples and changed synthetic expectations
@@ -106,9 +106,9 @@ interpretation to the listener, keeping only a nonempty string requirement.
 Keep existing defaults, immutable resolved settings and isolated programmatic
 configuration; supplied environment data must not merge with ambient process
 values. Continue resolving configuration before constructing Fastify and reuse
-it in the standalone healthcheck. Do not load `.env` automatically or expose
-validation details in process startup failures. This supersedes 004 O01's
-strict-decimal and custom-host validation policy; historical evidence is unchanged.
+it in the standalone healthcheck. Do not load `.env` automatically. This supersedes
+004 O01's strict-decimal and custom-host validation policy; historical evidence is
+unchanged.
 
 ## Count-only metadata amendment (2026-11-13)
 
@@ -133,6 +133,18 @@ audio resuming after terminal metadata. All fixture identities/counts remain.
 These rules count structurally identifiable frames; they do not promise to
 recover a correct count when metadata length/layout information is unusable.
 
+## Logging scope correction (2026-11-13)
+
+**S19:** Remove 004 O04's operational logging restrictions and the startup-error
+redaction requirement from S17. Use Fastify's standard logger with the configured
+level; application logging has no content allowlist, message suppression, field
+validation or child-binding filtering. Remove the corresponding unit and
+compiled-process privacy tests, including privacy-only assertions in otherwise
+useful startup, malformed-request and late-failure tests. Retain those functional
+tests and the startup/shutdown/upload-failure events used for process observation.
+Keep client error responses, parser behavior and resource ownership unchanged.
+Earlier plans/tasks and verification results describe the policy at their time.
+
 ## Acceptance scenarios and evidence
 
 Test every header split, one-byte/varied chunks, multiple frames per chunk,
@@ -141,7 +153,7 @@ local free-format decisions, every bound, cancellation and event-loop progress.
 Use controlled iterators/barriers to prove consumption and failure before EOF.
 Use listening HTTP for fixtures, epilogue, malformed/additional parts, limits,
 disconnects, deadlines, saturation and close ownership. Use compiled children for
-privacy/probes and real POSIX shutdown (label native Windows limitations).
+probes and real POSIX shutdown (label native Windows limitations).
 
 The heavy resource check lazily repeats the 21-frame, 8777-byte frame-only fixture
 to exceed 512 MiB of input, computes the expected count by repetition, samples

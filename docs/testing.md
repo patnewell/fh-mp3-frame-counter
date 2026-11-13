@@ -7,20 +7,20 @@ Ordinary tests need no media tools, database or Docker daemon.
 
 ## Test coverage
 
-| Location                                       | Purpose                                                                                                                                              |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tests/unit/mp3/`                              | Pure headers, arbitrary chunks, complete-frame counting, metadata, local free-format inference, resource bounds, cancellation and iterator ownership |
-| `tests/unit/upload/`                           | Admission isolation/idempotence/drain and safe error/rejection classification                                                                        |
-| `tests/unit/config.test.ts`, `logging.test.ts` | Immutable settings and actual root/nested-child privacy at configured levels                                                                         |
-| `tests/unit/harness.test.ts`                   | Biome import restrictions, vendored-file integrity and measurement-preload exit                                                                      |
-| `tests/integration/fixtures.test.ts`           | Fixture identities and independent counts and a lazy 71,901,184-byte real-audio traversal                                                            |
-| `tests/integration/upload.test.ts`             | Listening HTTP, all fixtures, envelopes, invalid inputs, limits and recovery                                                                         |
-| `tests/integration/multipart.test.ts`          | MIME/boundary normalization, malformed parts, encoding and HTTP-body completion                                                                      |
-| `tests/integration/upload-lifecycle.test.ts`   | Explicit parser/stream barriers for overload, cancellation, deadlines, provisional work and settled ownership                                        |
-| `tests/integration/closing.test.ts`            | Active keep-alive connection after close begins retains exact draining response                                                                      |
-| `tests/integration/operations.test.ts`         | Liveness, accepting/draining readiness and saturation policy                                                                                         |
-| `tests/integration/process.test.ts`            | Compiled startup, sample, probes, trace privacy, malformed transport and bounded shutdown                                                            |
-| `scripts/container-smoke.ts`                   | Actual image/runtime restrictions, sample, probes and clean stop without writable upload storage                                                     |
+| Location                                     | Purpose                                                                                                                                              |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests/unit/mp3/`                            | Pure headers, arbitrary chunks, complete-frame counting, metadata, local free-format inference, resource bounds, cancellation and iterator ownership |
+| `tests/unit/upload/`                         | Admission isolation/idempotence/drain and safe error/rejection classification                                                                        |
+| `tests/unit/config.test.ts`                  | Immutable settings, environment isolation and configuration validation                                                                               |
+| `tests/unit/harness.test.ts`                 | Biome import restrictions, vendored-file integrity and measurement-preload exit                                                                      |
+| `tests/integration/fixtures.test.ts`         | Fixture identities and independent counts and a lazy 71,901,184-byte real-audio traversal                                                            |
+| `tests/integration/upload.test.ts`           | Listening HTTP, all fixtures, envelopes, invalid inputs, limits and recovery                                                                         |
+| `tests/integration/multipart.test.ts`        | MIME/boundary normalization, malformed parts, encoding and HTTP-body completion                                                                      |
+| `tests/integration/upload-lifecycle.test.ts` | Explicit parser/stream barriers for overload, cancellation, deadlines, provisional work and settled ownership                                        |
+| `tests/integration/closing.test.ts`          | Active keep-alive connection after close begins retains exact draining response                                                                      |
+| `tests/integration/operations.test.ts`       | Liveness, accepting/draining readiness and saturation policy                                                                                         |
+| `tests/integration/process.test.ts`          | Compiled startup, sample, probes, malformed transport and bounded shutdown                                                                           |
+| `scripts/container-smoke.ts`                 | Actual image/runtime restrictions, sample, probes and clean stop without writable upload storage                                                     |
 
 Real sockets exercise multipart parsing, streams and connection closure. An
 injected response alone does not establish that transport behavior.
@@ -52,8 +52,7 @@ Use real timers for real sockets and child processes. Wait for parser barriers
 and captured events instead of sleeping to guess progress. Check elapsed time
 only when the deadline itself is the requirement, allowing scheduling margin.
 The epilogue cases check both successful completion after HTTP EOF and deadline
-rejection while EOF is withheld. Privacy checks await every relevant completion
-record before inspecting output. Process event waits use complete JSON lines and
+rejection while EOF is withheld. Process event waits use complete JSON lines and
 wait for stdio closure before classifying an event as missing.
 
 Prefer domain error types to internal wording. A specific reason assertion is
@@ -116,7 +115,7 @@ establish that a requirement has a meaningful test.
 ## Process, platform and container checks
 
 Compiled process tests launch from a temporary directory containing spaces.
-They check startup, sample counting, probes, private logs, malformed multipart,
+They check startup, sample counting, probes, malformed multipart,
 late parser failures and bounded shutdown. The process fixture can observe parser
 entry, fail after cancellation or hold work indefinitely.
 
@@ -172,7 +171,7 @@ production throughput and capacity require representative load measurements.
 
 Multipart parsing depends on stream event ordering. The compiled-process cases
 send malformed second parts over both Content-Length and chunked HTTP, and check
-safe responses, continued readiness and private logs. Retain these real-wire
+safe responses and continued readiness. Retain these real-wire
 regressions when upgrading Fastify or multipart dependencies, and reproduce any
 new failure in isolation. Passing the suite covers its cases, rather than every
 possible dependency event ordering.

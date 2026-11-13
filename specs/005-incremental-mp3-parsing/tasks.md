@@ -35,3 +35,7 @@
 ## Count-only metadata correction
 
 - [x] [T09] Establish failing tolerant-metadata regressions for S18, simplify forward skipping and bounded suffix extent detection, deliberately replace strict conformance assertions while preserving boundary/safety/fixture evidence, update current docs, apply `review-change` to the complete correction and record actual focused/full verification.
+
+## Logging scope correction
+
+- [x] [T10] Remove the log-content policy and its unit/integration privacy checks under S19, use standard Fastify logging, retain functional process/lifecycle tests, remove stale guidance and module references, review the complete correction and record actual smoke/full-gate results.
