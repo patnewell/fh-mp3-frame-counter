@@ -2,7 +2,7 @@ export interface UploadPermit {
   release(): void;
 }
 
-/** One event-loop-owned capacity budget; acquiring never crosses an await point. */
+/** Reserve capacity synchronously so concurrent requests cannot exceed the app's limit. */
 export class UploadAdmission {
   readonly #maximum: number;
   readonly #drainWaiters = new Set<() => void>();
@@ -17,8 +17,8 @@ export class UploadAdmission {
   }
 
   /**
-   * For a Kubernetes HPA, expose active uploads per instance as the preferred
-   * custom metric; target below the cap to scale before saturation.
+   * Preferred custom metric for a Kubernetes HPA: active uploads per instance.
+   * Target below capacity to scale before uploads are rejected.
    */
   get active(): number {
     return this.#active;
@@ -34,7 +34,7 @@ export class UploadAdmission {
     let released = false;
     return {
       release: () => {
-        // Several transport events can observe completion of the same upload.
+        // Completion and disconnect events may release the same permit.
         if (released) return;
         released = true;
         if (--this.#active === 0) {
@@ -49,7 +49,7 @@ export class UploadAdmission {
     this.#accepting = false;
   }
 
-  /** Stop admission first when the caller needs a stable shutdown barrier. */
+  /** Call stop() first to prevent new uploads while waiting for active work to settle. */
   drained(): Promise<void> {
     if (this.#active === 0) return Promise.resolve();
     return new Promise((resolve) => this.#drainWaiters.add(resolve));

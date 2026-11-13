@@ -4,14 +4,15 @@ import { describeUploadError, sendUploadError, UploadError } from "./error.ts";
 
 export interface UploadLifetime {
   readonly signal: AbortSignal;
+  /** Hold capacity until work settles, including its cleanup. */
   run<T>(work: () => Promise<T>): Promise<T>;
+  /** Prevent new work and release capacity once pending work settles. Does not cancel work. */
   finish(): void;
 }
 
 /**
- * run() owns a promise through its cleanup; finish() prevents new work but does not cancel it.
- * Deadline/disconnect abort the signal and request finishing, even while work is pending.
- * Release exactly once when finishing is requested AND every owned operation has settled.
+ * Deadline and disconnect signal cancellation, but work may still be running.
+ * Keep the permit until finish() is called and every run() callback has settled.
  */
 export function beginUpload(
   request: FastifyRequest,
@@ -44,7 +45,7 @@ export function beginUpload(
   }
 
   function requestClosed(): void {
-    // IncomingMessage also emits close after an ordinarily completed body.
+    // A normal request-body close can precede parsing completion, so it must not cancel work.
     if (!request.raw.complete) disconnect();
   }
 

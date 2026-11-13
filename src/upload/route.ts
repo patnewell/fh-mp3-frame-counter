@@ -1,3 +1,4 @@
+import type { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
 import { MIMEType } from "node:util";
 import multipart from "@fastify/multipart";
@@ -12,7 +13,7 @@ interface UploadSettings {
   readonly timeoutMs: number;
 }
 
-/** Only asynchronous work whose timing/failure matters to ownership is replaceable in tests. */
+/** Tests can replace the counter to control failures and cancellation timing. */
 export interface UploadOperations {
   count(input: AsyncIterable<Uint8Array>, signal: AbortSignal): Promise<number>;
 }
@@ -33,7 +34,7 @@ export function registerUploadRoute(
       files: 1,
       fields: 0,
       parts: 1,
-      // Explicitly disable the plugin's default file-size cap for streaming uploads.
+      // Omitting this option would restore the plugin's default file-size cap.
       fileSize: Number.POSITIVE_INFINITY,
       headerPairs: 32,
     },
@@ -43,13 +44,14 @@ export function registerUploadRoute(
     const problem = describeUploadError(error);
     const lifetime = lifetimes.get(request);
     try {
-      // The cancellation owner has already responded or observed a disconnected peer.
+      // The lifetime handles the timeout response or client disconnect.
       if (lifetime?.signal.aborted) return;
       if (lifetime && !reply.sent) {
         await lifetime.run(async () => {
-          const discarded = discardRejectedBody(request.raw, lifetime.signal);
+          const bodyDiscarded = discardRejectedBody(request.raw, lifetime.signal);
           sendUploadError(request, reply, problem);
-          await discarded;
+          // Sending the response does not release capacity while discard work is pending.
+          await bodyDiscarded;
         });
       } else {
         sendUploadError(request, reply, problem);
@@ -133,11 +135,11 @@ function validateMultipartHeaders(request: FastifyRequest): void {
     throw new UploadError(415, "Use multipart/form-data with one file field named file.");
   }
   const boundary = type.params.get("boundary");
-  // RFC 2046 bounds the delimiter and excludes a trailing space.
+  // RFC 2046 permits 1–70 boundary characters, with no trailing space.
   if (!boundary || !/^[0-9A-Za-z'()+_,./:=? -]{1,70}$/.test(boundary) || boundary.endsWith(" ")) {
     throw new UploadError(400, "Provide a valid multipart boundary.");
   }
-  // Pass one canonical parameter to prevent MIME/parser interpretation differences.
+  // Normalize the header so MIMEType and the multipart parser use the same boundary.
   request.headers["content-type"] = `multipart/form-data; boundary="${boundary}"`;
 }
 
@@ -151,32 +153,15 @@ async function countUpload(
   for await (const part of request.parts()) {
     if (part.type !== "file" || part.fieldname !== "file") {
       if (part.type === "file") {
-        const settled = finished(part.file, { cleanup: true }).catch(() => undefined);
+        const fileClosed = finished(part.file, { cleanup: true }).catch(() => undefined);
         part.file.destroy();
-        await settled;
+        await fileClosed;
       }
       throw new UploadError(400, "Expected exactly one file field named file.");
     }
-    // The lifetime owns both promises. Cancellation closes a blocked source read,
-    // but cannot release capacity while a counter that ignores it is still pending.
-    const settled = finished(part.file, { cleanup: true });
-    void settled.catch(() => undefined);
-    const cancel = (): void => {
-      part.file.destroy();
-    };
-    signal.addEventListener("abort", cancel, { once: true });
-    if (signal.aborted) cancel();
-    try {
-      frameCount = await count(part.file, signal);
-      if (!part.file.readableEnded) throw new Error("The counter returned before file EOF.");
-      await settled;
-    } finally {
-      if (!part.file.readableEnded) part.file.destroy();
-      await settled.catch(() => undefined);
-      signal.removeEventListener("abort", cancel);
-    }
+    frameCount = await countFile(part.file, count, signal);
   }
-  // A closing multipart delimiter does not establish that the HTTP epilogue ended.
+  // Multipart can end before the HTTP body. Wait for any epilogue before reporting success.
   const bodyComplete = finished(request.raw, {
     readable: true,
     writable: false,
@@ -189,4 +174,31 @@ async function countUpload(
   if (frameCount === undefined)
     throw new UploadError(400, "Expected exactly one file field named file.");
   return frameCount;
+}
+
+async function countFile(
+  file: Readable,
+  count: UploadOperations["count"],
+  signal: AbortSignal,
+): Promise<number> {
+  const fileFinished = finished(file, { cleanup: true });
+  // Prevent an unhandled rejection if the file fails before the counter settles.
+  void fileFinished.catch(() => undefined);
+  const cancel = (): void => {
+    // Interrupt a source read that cannot observe the abort signal itself.
+    file.destroy();
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  if (signal.aborted) cancel();
+  try {
+    // Await the counter even after cancellation so the lifetime keeps its capacity slot.
+    const frameCount = await count(file, signal);
+    if (!file.readableEnded) throw new Error("The counter returned before file EOF.");
+    await fileFinished;
+    return frameCount;
+  } finally {
+    if (!file.readableEnded) file.destroy();
+    await fileFinished.catch(() => undefined);
+    signal.removeEventListener("abort", cancel);
+  }
 }

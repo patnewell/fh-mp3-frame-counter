@@ -618,3 +618,27 @@ ceiling. Baseline RSS was 79,020,032 bytes; separate client peak RSS was
 the report identifies the base revision and `workingTreeDirty: true`.
 This measures the tested lazy input, not general production throughput.
 Docker and other-platform checks were not rerun; prior qualifications remain.
+
+## Upload directory readability
+
+Reviewed and cleaned up all four `src/upload/` modules in the uncommitted working
+tree based on `b6d0cd8778155e7736e2f26edce84a039efec187`, using Node **24.22.3**.
+Extracted file counting and stream cleanup into a private `countFile` helper so
+multipart validation and HTTP completion remain easy to follow. Named the
+rejected-body byte limit and clarified local promise/byte-counter names. Tightened
+comments to explain synchronous admission, safe errors, cancellation, stream
+settlement and the difference between responding and releasing capacity.
+
+Applied `review-change` to the complete maintenance diff and affected callers
+and tests. Success, invalid parts, early parser failure/return, overload,
+deadlines, disconnects, rejected-body cleanup and application drain retain their
+existing behavior. No unresolved findings remain. No contract, fixture, test,
+coverage threshold or deployment setting changed; existing regression tests
+exercise the extracted stream lifecycle without adding implementation-only tests.
+
+`npm.cmd run verify` passed lint, strict typecheck, clean build and coverage:
+**365 passed, zero failed, three expected native Windows POSIX-signal skips**,
+across 20 files. Coverage: **97.95% statements, 96.08% branches, 97.61% functions,
+99.23% lines**. Final edits after that gate only polished comments and added this
+record. Heavy resource checks, Docker checks and other-platform execution were
+not rerun for this behavior-preserving cleanup. No commit or push was made.
