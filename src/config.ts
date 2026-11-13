@@ -1,5 +1,16 @@
-const logLevels = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
-export type LogLevel = (typeof logLevels)[number];
+import type { LogLevel } from "fastify";
+
+export type { LogLevel } from "fastify";
+
+const logLevels = [
+  "fatal",
+  "error",
+  "warn",
+  "info",
+  "debug",
+  "trace",
+  "silent",
+] as const satisfies readonly LogLevel[];
 
 export interface AppOptions {
   readonly maxFileBytes?: number;

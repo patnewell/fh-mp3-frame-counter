@@ -206,3 +206,19 @@ entrypoint assertions, monitoring lifetime, bounded observations, documentation 
 the two added regressions. Production application/parser code and gates were not
 changed by this measurement correction. Docker and other platform qualifications
 above remain; no container execution or push is claimed.
+
+## Framework log-level type reuse (2026-11-12)
+
+Tested base `811ef1d3ae903e5b6d6de33b47e4e6d05a3607b8` plus the working-tree
+configuration change, on native Windows x64 / Node 24.22.3. `src/config.ts` now
+imports and re-exports Fastify's `LogLevel`; the runtime allowlist is checked
+with `as const satisfies readonly LogLevel[]`. Accepted values, defaults, runtime
+validation and existing type-import paths remain unchanged.
+
+Self-review with `review-change` found no issues in the complete diff or affected
+logging/configuration callers. Existing tests cover all seven levels and unknown
+value rejection; no new runtime behavior or assertion changes were needed.
+`npm.cmd run verify` passed lint, strict typecheck, clean build and coverage:
+**340 passed, zero failed, three expected Windows POSIX skips**. Coverage and
+gates are unchanged; `git diff --check` passed. Resource, Docker and other-platform
+checks were not rerun for this type-only change.
