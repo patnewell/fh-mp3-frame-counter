@@ -9,7 +9,6 @@ import { describeUploadError, discardRejectedBody, sendUploadError, UploadError 
 import { beginUpload, type UploadLifetime } from "./lifetime.ts";
 
 interface UploadSettings {
-  readonly maxFileBytes: number;
   readonly timeoutMs: number;
 }
 
@@ -30,7 +29,14 @@ export function registerUploadRoute(
   };
   const lifetimes = new WeakMap<FastifyRequest, UploadLifetime>();
   app.register(multipart, {
-    limits: { files: 1, fields: 0, parts: 1, fileSize: settings.maxFileBytes, headerPairs: 32 },
+    limits: {
+      files: 1,
+      fields: 0,
+      parts: 1,
+      // Explicitly disable the plugin's default file-size cap for streaming uploads.
+      fileSize: Number.POSITIVE_INFINITY,
+      headerPairs: 32,
+    },
   });
   app.addHook("onResponse", async (request) => lifetimes.get(request)?.finish());
   app.setErrorHandler(async (error: unknown, request, reply) => {
@@ -161,13 +167,7 @@ async function countUpload(
     signal.addEventListener("abort", cancel, { once: true });
     if (signal.aborted) cancel();
     try {
-      try {
-        frameCount = await count(part.file, signal);
-      } catch (error) {
-        if (part.file.truncated) throw new UploadError(413, "The file exceeds the upload limit.");
-        throw error;
-      }
-      if (part.file.truncated) throw new UploadError(413, "The file exceeds the upload limit.");
+      frameCount = await count(part.file, signal);
       if (!part.file.readableEnded) throw new Error("The counter returned before file EOF.");
       await settled;
     } finally {

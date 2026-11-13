@@ -15,3 +15,7 @@
 ## Existing service clarification
 
 - [x] [T04] Remove `scripts/resource-server.ts`; make `scripts/resource-check.ts` launch the existing `dist/server.js` with a measurement-only preload in `scripts/resource-monitor.ts`. Assert/report the actual entrypoint, add a normal-entrypoint pre-EOF HTTP regression, update current documentation and record actual review/gate/resource results without rewriting earlier evidence.
+
+## File-size policy correction
+
+- [x] [T05] Establish a failing lazy HTTP upload above the former 100 MiB cap, remove total file-byte configuration/enforcement and resource-check size overrides, retain concurrency/deadlines/structural limits and invalid-media recovery, comment the active-upload count as a Kubernetes HPA custom metric, update current docs, review the full correction and record actual full-gate/native-resource results.

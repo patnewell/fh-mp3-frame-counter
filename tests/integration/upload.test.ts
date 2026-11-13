@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { describe, expect, it } from "vitest";
 import { fixturePath, formFor, withHttpApp } from "../helpers/http.ts";
 import { ape, id3, id3v1 } from "../helpers/mp3.ts";
+import { BOUNDARY, within, withUploadApp } from "../helpers/upload-lifecycle.ts";
 
 const invalidScenarios = [
   "unsupported-mpeg2",
@@ -166,15 +169,44 @@ describe("MP3 upload API", () => {
     },
   );
 
-  it("returns 413 for oversized data, then still accepts a permitted upload", async () => {
+  it("counts an upload above the former 100 MiB cap without a file-size override", async () => {
+    const block = await readFile(fixturePath("cbr-stereo-44100.mp3"));
+    const repetitions = 12_000;
+    expect(block.length * repetitions).toBeGreaterThan(100 * 1024 * 1024);
+    async function* body() {
+      yield Buffer.from(
+        `--${BOUNDARY}\r\nContent-Disposition: form-data; name="file"; filename="audio.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n`,
+      );
+      for (let repetition = 0; repetition < repetitions; repetition++) yield block;
+      yield Buffer.from(`\r\n--${BOUNDARY}--\r\n`);
+    }
+    await withUploadApp({ timeoutMs: 30_000 }, {}, async (service) => {
+      const upload = service.open();
+      const sent = pipeline(Readable.from(body()), upload.request);
+      void sent.catch(() => undefined);
+      try {
+        const response = await within(upload.response, 8000);
+        expect(response.status).toBe(200);
+        // 12,000 repetitions × independently established 21 frames per block.
+        expect(JSON.parse(response.body)).toEqual({ frameCount: 252_000 });
+        await sent;
+        expect(service.admission.active).toBe(0);
+      } finally {
+        upload.request.destroy();
+        await sent.catch(() => undefined);
+      }
+    });
+  });
+
+  it("rejects trailing junk with 400, then still accepts valid audio", async () => {
     const bytes = await readFile(fixturePath("cbr-stereo-44100.mp3"));
-    await withHttpApp({ maxFileBytes: bytes.length }, async ({ url }) => {
-      const oversized = await fetch(`${url}/file-upload`, {
+    await withHttpApp({}, async ({ url }) => {
+      const invalid = await fetch(`${url}/file-upload`, {
         method: "POST",
         body: formFor(Buffer.concat([bytes, Buffer.of(0)])),
       });
-      expect(oversized.status).toBe(413);
-      expect(await oversized.json()).toEqual({ error: expect.any(String) });
+      expect(invalid.status).toBe(400);
+      expect(await invalid.json()).toEqual({ error: expect.any(String) });
       const accepted = await fetch(`${url}/file-upload`, { method: "POST", body: formFor(bytes) });
       expect(accepted.status).toBe(200);
       expect(await accepted.json()).toEqual({ frameCount: 21 });

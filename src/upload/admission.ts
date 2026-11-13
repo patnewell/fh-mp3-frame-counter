@@ -16,6 +16,10 @@ export class UploadAdmission {
     this.#maximum = maximum;
   }
 
+  /**
+   * For a Kubernetes HPA, expose active uploads per instance as the preferred
+   * custom metric; target below the cap to scale before saturation.
+   */
   get active(): number {
     return this.#active;
   }

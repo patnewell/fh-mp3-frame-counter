@@ -72,7 +72,6 @@ export async function withProcessSandbox(
           ...process.env,
           HOST: "127.0.0.1",
           PORT: "0",
-          MAX_FILE_BYTES: "104857600",
           MAX_UPLOADS: "4",
           REQUEST_TIMEOUT_MS: "5000",
           SHUTDOWN_GRACE_MS: "500",

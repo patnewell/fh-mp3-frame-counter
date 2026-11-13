@@ -117,3 +117,18 @@ event and sample RSS through the preload's IPC messages. The preload imports no
 app/server factory and opens no network listeners; its timer and IPC channel are
 unreferenced. Assert the process entrypoint and retain bounded observation and
 termination. Recheck the normal server's pre-EOF parsing and actual lazy upload.
+
+## File-size policy refinement (2026-11-13)
+
+S16 removes only total file-byte enforcement and its configuration from the
+existing streaming route. Set the multipart `fileSize` option explicitly to
+positive infinity: omitting it inherits the framework's finite body limit.
+Remove obsolete truncation-to-413 handling and file-size error/configuration
+tests; keep multipart count-limit classification and all lifecycle constraints.
+The earlier transport plan's file-limit conversion is superseded by this policy.
+Replace the capped-upload recovery scenario with malformed-media recovery and
+add a lazy real-HTTP regression above 100 MiB before implementing the change.
+Remove size overrides from both resource-check modes; retain independent counts
+and memory observations. Keep earlier measurements intact, update current docs,
+comment the active-upload count for future Kubernetes HPA integration, and use
+`review-change` plus the complete gate and native resource check for evidence.

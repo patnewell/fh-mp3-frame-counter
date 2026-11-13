@@ -13,14 +13,12 @@ const logLevels = [
 ] as const satisfies readonly LogLevel[];
 
 export interface AppOptions {
-  readonly maxFileBytes?: number;
   readonly maxUploads?: number;
   readonly timeoutMs?: number;
   readonly logLevel?: LogLevel;
 }
 
 export interface AppSettings {
-  readonly maxFileBytes: number;
   readonly maxUploads: number;
   readonly timeoutMs: number;
   readonly logLevel: LogLevel;
@@ -35,7 +33,6 @@ export interface RuntimeConfig extends AppSettings {
 /** Programmatic and environment configuration share the same range policy. */
 export function resolveAppSettings(options: AppOptions = {}): AppSettings {
   return Object.freeze({
-    maxFileBytes: integer(options.maxFileBytes ?? 100 * 1024 * 1024, "MAX_FILE_BYTES"),
     maxUploads: integer(options.maxUploads ?? 4, "MAX_UPLOADS"),
     timeoutMs: integer(options.timeoutMs ?? 30_000, "REQUEST_TIMEOUT_MS", 1, 2_147_483_647),
     logLevel: logLevel(options.logLevel ?? "silent"),
@@ -51,7 +48,6 @@ export function readConfig(environment: Readonly<NodeJS.ProcessEnv>): RuntimeCon
   }
   return Object.freeze({
     ...resolveAppSettings({
-      maxFileBytes: decimal(environment.MAX_FILE_BYTES, "MAX_FILE_BYTES", defaults.maxFileBytes),
       maxUploads: decimal(environment.MAX_UPLOADS, "MAX_UPLOADS", defaults.maxUploads),
       timeoutMs: decimal(environment.REQUEST_TIMEOUT_MS, "REQUEST_TIMEOUT_MS", defaults.timeoutMs),
       logLevel: logLevel(environment.LOG_LEVEL ?? "info"),

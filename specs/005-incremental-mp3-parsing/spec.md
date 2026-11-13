@@ -22,7 +22,7 @@ Earlier specifications and execution evidence remain historical.
 | S07 | Stream-skip declared leading ID3v2.2/2.3/2.4 and paired APEv2 bodies, validating descriptors/required footers without retaining bodies. After audio, stream-skip recognized forward ID3v1, paired APEv2 and paired ID3v2.4 envelopes. Reject audio after terminal metadata, malformed pairs, nonzero APEv1 flags, invalid/reserved fields and trailing junk.                                                                                 |
 | S08 | Footer-only APEv1/v2 has no leading length. Buffer at most 64 KiB of the remaining unknown terminal suffix and validate complete chains backward at EOF with at most 4096 alternative selections. Reject a larger unknown suffix immediately. Recognized forward envelopes take precedence; ordinary forward tag chains have no artificial count/depth cap and large declared metadata is skipped without retention.                         |
 | S09 | Bound synchronous progress: yield to the event loop at least every 64 KiB consumed/searched, including a large producer chunk or many tiny chunks. Check cancellation before pulling input and during work; release the upstream iterator on completion/error. Retained fragments own their bytes rather than pinning prior producer buffers. A borrowed current producer chunk is additional input memory, not accumulated parser storage.  |
-| S10 | Pass the multipart file stream directly to the counter. Preserve exactly one file field `file`, encoding/type/boundary validation, file/part/field limits, truncation detection, safe JSON errors, rejection byte bounds, disconnects and deadlines. Defaults stay 100 MiB, four concurrent uploads and 30 seconds.                                                                                                                          |
+| S10 | Pass the multipart file stream directly to the counter. Preserve exactly one file field `file`, encoding/type/boundary validation, file/part/field count limits, malformed/truncated media detection, safe JSON errors, rejection byte bounds, disconnects and deadlines. Per S16 there is no application file-size cap; defaults remain four concurrent uploads and 30 seconds.                                                             |
 | S11 | Capacity remains occupied until owned file-stream/parser/rejection work settles, even after an early error/deadline/disconnect. Hold application close/drain for pending work. Preserve busy/draining retry headers, graceful signal draining, forced cancellation and final shutdown bound.                                                                                                                                                 |
 | S12 | Remove upload files/directories, seek infrastructure, disposal seams, `UPLOAD_TEMP_DIR`, storage probes, orphan policies and cleanup log categories. Readiness reflects accepting work; saturation alone remains ready. Preserve private allowlisted logs and liveness.                                                                                                                                                                      |
 | S13 | Container runs non-root with a read-only root and no upload mount/tmpfs. Preserve CPU/memory/PID/security/probe/stop restrictions. Supply a separate executable lazy large-upload resource check with independent expected counts and server RSS observations; where Docker is available enforce 256 MiB memory and send more than that budget. Do not claim blocked container checks or heap-only observations prove total-memory behavior. |
@@ -80,6 +80,20 @@ must not create applications, network listeners, or references that keep shutdow
 A compiled normal-entrypoint HTTP regression must prove parsing occurs while
 file and HTTP EOF remain unavailable. This clarifies S04/S13 without changing
 framing, metadata or HTTP compatibility.
+
+## File-size policy amendment (2026-11-13)
+
+**S16:** Remove the application's total file-byte cap and the `MAX_FILE_BYTES` /
+`maxFileBytes` configuration. Explicitly disable the multipart dependency's
+default file-size limit. This supersedes S10's original 100 MiB default/file truncation
+policy and the file-size configuration in 004 O01; earlier execution evidence
+remains historical. Stream a valid upload above the former 100 MiB cap over real
+HTTP without a size override and verify its independently established count.
+Keep file/field/part counts, framing validation, bounded retained state/rejection
+bytes, deadlines and settled-work ownership. Preserve the per-instance upload
+cap; document the active-upload count as the preferred per-pod custom metric for
+a Kubernetes HPA, targeting below the cap to scale before saturation. This comment
+does not add metric publication or deployment configuration.
 
 ## Acceptance scenarios and evidence
 

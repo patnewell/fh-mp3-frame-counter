@@ -222,3 +222,54 @@ value rejection; no new runtime behavior or assertion changes were needed.
 **340 passed, zero failed, three expected Windows POSIX skips**. Coverage and
 gates are unchanged; `git diff --check` passed. Resource, Docker and other-platform
 checks were not rerun for this type-only change.
+
+## Remove the total file-byte cap (2026-11-13)
+
+Tested base `c4867e30b313728de03499c2dbceb787afd6d88f` plus the working-tree
+S16 correction, on native Windows x64 / Node 24.22.3. The existing route now
+sets multipart `fileSize` to positive infinity explicitly; omitting it would
+inherit Fastify's finite body limit. `MAX_FILE_BYTES` / `maxFileBytes`, the
+file-limit truncation branch and resource-check size overrides are removed.
+The local concurrency limit and settled-work lifetimes are unchanged. The
+active-upload getter now explains its use as the preferred Kubernetes HPA custom
+metric with a target below the cap; no metric endpoint or HPA configuration was
+added. Current operational docs and S10/S16 describe the resulting contract.
+
+Before implementation, the new lazy real-HTTP regression failed with **413
+instead of 200**. It sends 105,324,000 valid file bytes (12,000 copies of the
+unchanged, independently established 21-frame fixture) without a size override.
+After implementation it passes with exactly **252,000 frames** and releases
+admission. The focused upload/configuration/error/admission run passed 90 tests.
+
+Intentional assertion changes remove seven obsolete file-byte configuration
+rejection cases and one file-size dependency-error mapping. A new test confirms
+the removed environment setting no longer affects startup configuration. The
+former capped-upload recovery case keeps its trailing-junk input and successful
+follow-up upload, now correctly expecting invalid-media 400. All three multipart
+count-limit classifications and real-HTTP structural limits remain covered.
+Fixtures, dependency pins, coverage gates/exclusions and unrelated checks are
+unchanged; the resulting full-suite count is six lower than the prior 340.
+
+Self-review using `review-change` inspected the complete correction, config and
+route callers, plugin defaults, success/invalid input, cancellation, overload,
+stream settlement, resource-check arguments and changed test expectations.
+No findings remain. `git diff --check` passed. `npm.cmd run verify` passed lint,
+strict typecheck, clean build and coverage: **334 passed, zero failed, three
+expected native Windows POSIX-signal skips**, across 20 files. Coverage was
+**95.65% statements**, **93.70% branches**, **97.70% functions** and
+**97.52% lines**. The skipped signal cases require Linux/macOS signal delivery;
+their execution is not claimed here.
+
+`npm.cmd run test:resources` passed through the normal `dist/server.js` with no
+file-size override: **536,871,536 bytes** returned exactly **1,284,528 frames**,
+with liveness healthy afterward. Actual execution was **2026-11-13
+00:24:13.600–00:24:15.306 UTC**; the report records `workingTreeDirty: true`.
+Server baseline RSS was 75,608,064 bytes, server OS peak RSS **93,024,256 bytes
+(about 88.7 MiB)**, and 53 observations remained below the 256 MiB ceiling.
+Separate client peak RSS was 75,071,488 bytes. These observations describe this
+test input, not production throughput or a universal memory guarantee.
+
+`npm.cmd run test:resources:container` was attempted and reported **unavailable**:
+`spawn docker ENOENT`. No container ran. Other-platform and hosted checks were
+not executed; earlier qualified evidence remains historical. These measurements
+were taken from the uncommitted correction. No push was performed.

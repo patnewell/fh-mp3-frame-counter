@@ -97,9 +97,10 @@ has settled. A timeout response or abort signal alone does not release capacity.
 The route's parser/stream cleanup is awaited even after cancellation; a count
 operation deliberately ignoring cancellation still occupies its slot.
 
-The default policy is four uploads, 100 MiB file-part bytes and a 30-second
-admission-to-processing deadline. Busy/draining requests receive safe 503 JSON,
-`Retry-After: 1` and a closing connection without queuing. Rejected input has a
+The default policy is four concurrent uploads and a 30-second
+admission-to-processing deadline, with no application file-size cap. Busy/draining
+requests receive safe 503 JSON, `Retry-After: 1` and a closing connection without
+queuing. Rejected input has a
 64 KiB drain allowance plus at most one delivered chunk and the same deadline.
 Normal completed request-body closure does not cancel parsing. An unfinished
 HTTP epilogue may follow provisional counting but prevents success and remains

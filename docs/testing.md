@@ -39,6 +39,12 @@ A lazy source repeats the 21-frame, 8777-byte frame-only fixture 8192 times:
 71,901,184 bytes and 172,032 frames, without writing or accumulating that input.
 This test proves correct traversal; the separate resource checks measure memory.
 
+A listening HTTP regression streams 12,000 repetitions of that fixture without
+accumulating the body: 105,324,000 file bytes exceed the former 100 MiB cap and
+must return 252,000 frames without a file-size override. It also catches an
+accidentally restored multipart dependency default. Multipart count limits,
+invalid-media recovery, deadlines and admission ownership remain separate checks.
+
 A controlled incomplete source supplies an invalid ID3 descriptor while keeping
 EOF unavailable. Rejection before another pull proves parsing starts before EOF,
 which input consumption alone would not establish. Event-loop/cancellation cases
@@ -119,7 +125,7 @@ Heavy checks remain separate from the normal gate:
 | Windows PowerShell | `npm.cmd run test:resources` | `npm.cmd run test:resources:container` |
 
 Inputs lazily repeat known frame-only fixture bytes to exceed 512 MiB, use test-only
-size/deadline overrides, and compute expected counts from repetitions × 21.
+concurrency/deadline overrides, and compute expected counts from repetitions × 21.
 Neither client nor server constructs a complete upload. The native check samples
 server RSS/peak RSS in an isolated child and reports client memory separately;
 its generous 256 MiB server ceiling detects whole-file accumulation without

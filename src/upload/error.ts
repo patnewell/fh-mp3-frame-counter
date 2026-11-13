@@ -42,11 +42,9 @@ export function describeUploadError(error: unknown): UploadProblem {
   const code = typeof error === "object" && error !== null && "code" in error ? error.code : "";
   if (
     typeof code === "string" &&
-    ["FST_REQ_FILE_TOO_LARGE", "FST_FILES_LIMIT", "FST_FIELDS_LIMIT", "FST_PARTS_LIMIT"].includes(
-      code,
-    )
+    ["FST_FILES_LIMIT", "FST_FIELDS_LIMIT", "FST_PARTS_LIMIT"].includes(code)
   ) {
-    return { status: 413, message: "The upload exceeds a file or multipart limit." };
+    return { status: 413, message: "The upload exceeds a multipart limit." };
   }
   if (code === "FST_INVALID_MULTIPART_CONTENT_TYPE") {
     return { status: 415, message: "Use multipart/form-data with one file field named file." };

@@ -62,16 +62,16 @@ absent or `identity`. Success contains only a positive integer `frameCount`.
 | ------ | ---------------------------------------------------------------------------- |
 | 200    | Complete supported framing counted                                           |
 | 400    | Missing/wrong/empty file, malformed multipart, unsupported or invalid MPEG   |
-| 413    | File-byte, file-count, field-count or part-count limit                       |
+| 413    | File-count, field-count or part-count limit                                  |
 | 415    | Unsupported request content type or encoding                                 |
 | 503    | Upload capacity full, admission stopped or admitted request deadline expired |
 | 500    | Safe generic unexpected processing failure                                   |
 
 Upload error JSON has one `error` string. A sender still uploading rejected data can
-observe a connection close before reading the error. The default file limit is
-100 MiB, with four concurrent uploads per app and a 30-second admission-to-processing
-deadline. Busy/draining responses include `Retry-After: 1`. The parser consumes
-file bytes as they arrive, with no upload file, tmpfs or complete in-memory
+observe a connection close before reading the error. There is no application
+file-size limit. Defaults are four concurrent uploads per app and a 30-second
+admission-to-processing deadline. Busy/draining responses include `Retry-After: 1`.
+The parser consumes file bytes as they arrive, with no upload file, tmpfs or complete in-memory
 buffer. Success waits for valid file EOF, multipart completion and the complete
 HTTP body. Cancellation does not release capacity while stream/parser/rejection
 work remains unsettled.
@@ -101,7 +101,7 @@ removes its resources.
 | Windows PowerShell | `npm.cmd run test:container` |
 
 The container uses a read-only root with no writable upload mount. Separate heavy
-resource checks lazily send over 512 MiB with test-only upload/deadline overrides:
+resource checks lazily send over 512 MiB with test-only concurrency/deadline settings:
 
 | Platform           | Isolated process             | Constrained Linux container            |
 | ------------------ | ---------------------------- | -------------------------------------- |

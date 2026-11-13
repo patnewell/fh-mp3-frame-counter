@@ -175,7 +175,7 @@ describe("compiled application from an unrelated directory with spaces", () => {
           const response = await withinProcess(upload.response);
           expect(response.status).toBe(413);
           expect(JSON.parse(response.body)).toEqual({
-            error: "The upload exceeds a file or multipart limit.",
+            error: "The upload exceeds a multipart limit.",
           });
           expect(await (await fetch(`${service.url}/health/ready`)).json()).toEqual({
             status: "ready",

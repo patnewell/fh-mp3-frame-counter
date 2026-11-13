@@ -15,16 +15,17 @@ entrypoints read environment values. A `.env` file is not loaded automatically.
 | -------------------- | ---------------------------- | ---------------------------------------------------------------------------------- |
 | `HOST`               | `127.0.0.1`; image `0.0.0.0` | Nonblank, NUL-free host/address; Node must bind it                                 |
 | `PORT`               | `3000`                       | Decimal 0–65535; zero selects an ephemeral server port, but probes require nonzero |
-| `MAX_FILE_BYTES`     | `104857600` (100 MiB)        | Positive safe integer; file-part bytes                                             |
 | `MAX_UPLOADS`        | `4`                          | Positive safe integer; local admitted upload count                                 |
 | `REQUEST_TIMEOUT_MS` | `30000`                      | Decimal 1–2147483647; admission through processing                                 |
 | `SHUTDOWN_GRACE_MS`  | `10000`                      | Decimal 1–2147483647; drain before forced connection cancellation                  |
 | `LOG_LEVEL`          | `info`                       | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`                     |
 
 Signs, whitespace, fractions, exponent notation and unsafe integers are rejected.
-Validation ranges are not recommended production budgets. Size limits, concurrency
-and deadlines must fit measured workload and memory. `UPLOAD_TEMP_DIR` was removed
-in 005: uploads have no filesystem staging or storage dependency.
+Validation ranges are not recommended production budgets. Concurrency and
+deadlines must fit measured workload and memory. There is no application file-size
+cap; `MAX_FILE_BYTES` has been removed and no longer affects configuration.
+`UPLOAD_TEMP_DIR` was removed in 005: uploads have no filesystem staging or storage
+dependency.
 
 ## Health and admission
 
@@ -59,8 +60,8 @@ The parser skips known payloads and large declared metadata bodies. It retains
 small descriptors, one borrowed current source chunk, numeric inference state,
 and at most 64 KiB of unknown terminal bytes. Network/multipart buffering, Node
 heap/native memory and the current producer chunk add overhead. A V8 old-space
-limit is not a total-process-memory cap. Four 100 MiB upload limits do not reserve
-400 MiB of staged files because those files no longer exist.
+limit is not a total-process-memory cap. Total file size does not determine retained
+parser memory, but each concurrent upload adds stream and processing overhead.
 
 Separate [resource checks](testing.md#large-input-resource-checks) lazily send more
 than 512 MiB using test-only limits. The native check observes server RSS separately
@@ -82,10 +83,13 @@ sending client may observe a reset before reading error JSON.
 There are no uploaded files to delete, disposal failures or upload orphan cleanup.
 Each replica owns its local budget and stream state. Requests need no shared
 filesystem, lock or session affinity; local admission is not a fleet/tenant quota.
+For Kubernetes HPA integration, active uploads per instance is the preferred
+per-pod custom metric, with a target below `MAX_UPLOADS` to scale before saturation.
+Metric publication and HPA configuration are not supplied by this service.
 Trusted ingress supplies TLS, authentication, total transport/header limits,
 receive/idle timeouts, connection bounds and fleet/client quotas. Multipart
-preamble/epilogue bytes are not file-part bytes; incomplete HTTP headers precede
-application admission.
+preamble/epilogue bytes are outside the MP3 parser; incomplete HTTP headers precede
+application admission. Any ingress body-size policy is independent of this service.
 
 ## Shutdown and diagnosis
 

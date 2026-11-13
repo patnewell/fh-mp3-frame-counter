@@ -6,7 +6,6 @@ describe("runtime configuration", () => {
     expect(readConfig({})).toEqual({
       host: "127.0.0.1",
       port: 3000,
-      maxFileBytes: 100 * 1024 * 1024,
       maxUploads: 4,
       timeoutMs: 30_000,
       shutdownGraceMs: 10_000,
@@ -20,7 +19,6 @@ describe("runtime configuration", () => {
       readConfig({
         HOST: "::",
         PORT: "0",
-        MAX_FILE_BYTES: "4096",
         MAX_UPLOADS: "2",
         REQUEST_TIMEOUT_MS: "1500",
         SHUTDOWN_GRACE_MS: "250",
@@ -29,12 +27,15 @@ describe("runtime configuration", () => {
     ).toEqual({
       host: "::",
       port: 0,
-      maxFileBytes: 4096,
       maxUploads: 2,
       timeoutMs: 1500,
       shutdownGraceMs: 250,
       logLevel: "trace",
     });
+  });
+
+  it("ignores the removed MAX_FILE_BYTES environment setting", () => {
+    expect(readConfig({ MAX_FILE_BYTES: "0" })).toEqual(readConfig({}));
   });
 
   it("freezes resolved primitive settings so callers cannot change policy after construction", () => {
@@ -54,8 +55,6 @@ describe("runtime configuration", () => {
 
   it.each([
     ["PORT", "65536"],
-    ["MAX_FILE_BYTES", "0"],
-    ["MAX_FILE_BYTES", "9007199254740992"],
     ["MAX_UPLOADS", "0"],
     ["MAX_UPLOADS", "9007199254740992"],
     ["REQUEST_TIMEOUT_MS", "0"],

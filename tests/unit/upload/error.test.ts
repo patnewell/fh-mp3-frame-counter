@@ -17,12 +17,12 @@ describe("public upload failures", () => {
       retryAfter: 1,
     });
   });
-  it.each(["FST_REQ_FILE_TOO_LARGE", "FST_FILES_LIMIT", "FST_FIELDS_LIMIT", "FST_PARTS_LIMIT"])(
+  it.each(["FST_FILES_LIMIT", "FST_FIELDS_LIMIT", "FST_PARTS_LIMIT"])(
     "maps %s without exposing dependency details",
     (code) =>
       expect(describeUploadError({ code, message: "private" })).toEqual({
         status: 413,
-        message: "The upload exceeds a file or multipart limit.",
+        message: "The upload exceeds a multipart limit.",
       }),
   );
   it.each([
@@ -62,10 +62,4 @@ describe("application options", () => {
   it.each([0, -1, 1.5, Number.NaN])("rejects invalid app capacity %s", (maxUploads) => {
     expect(() => createApp({ maxUploads })).toThrow(RangeError);
   });
-  it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])(
-    "rejects invalid maximum %s",
-    (maxFileBytes) => {
-      expect(() => createApp({ maxFileBytes })).toThrow(RangeError);
-    },
-  );
 });
