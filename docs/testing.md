@@ -1,19 +1,19 @@
-﻿# Testing and review
+# Testing
 
 Use the pinned Node version and [platform commands](development.md). `verify`
 lints, typechecks, builds cleanly and runs Vitest with V8 coverage. Unit-only
 runs execute TypeScript source; integration/all-test scripts build first.
 Ordinary tests need no media tools, database or Docker daemon.
 
-## Evidence by boundary
+## Test coverage
 
 | Location                                       | Purpose                                                                                                                                              |
 | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tests/unit/mp3/`                              | Pure headers, arbitrary chunks, complete-frame counting, metadata, local free-format inference, resource bounds, cancellation and iterator ownership |
 | `tests/unit/upload/`                           | Admission isolation/idempotence/drain and safe error/rejection classification                                                                        |
 | `tests/unit/config.test.ts`, `logging.test.ts` | Immutable settings and actual root/nested-child privacy at configured levels                                                                         |
-| `tests/unit/harness.test.ts`                   | Actual Biome import boundary and official Lean skill hashes                                                                                          |
-| `tests/integration/fixtures.test.ts`           | Unchanged fixture identities/counts and a lazy 71,901,184-byte real-audio traversal                                                                  |
+| `tests/unit/harness.test.ts`                   | Biome import restrictions, vendored-file integrity and measurement-preload exit                                                                      |
+| `tests/integration/fixtures.test.ts`           | Fixture identities and independent counts and a lazy 71,901,184-byte real-audio traversal                                                            |
 | `tests/integration/upload.test.ts`             | Listening HTTP, all fixtures, envelopes, invalid inputs, limits and recovery                                                                         |
 | `tests/integration/multipart.test.ts`          | MIME/boundary normalization, malformed parts, encoding and HTTP-body completion                                                                      |
 | `tests/integration/upload-lifecycle.test.ts`   | Explicit parser/stream barriers for overload, cancellation, deadlines, provisional work and settled ownership                                        |
@@ -62,145 +62,117 @@ rejection path, such as exhausting the metadata alternative-chain budget.
 
 ## Independent inputs and parser progress
 
-The supplied sample still yields **6090** physical frames. The
-[fixture manifest/guide](../tests/fixtures/README.md) preserves all six assets,
+The supplied sample yields **6090 physical frames**. The [fixture guide](../tests/fixtures/README.md)
+and [manifest](../tests/fixtures/manifest.json) document all six assets, their
 hashes and independently established counts. Tests never derive expected counts
 from the application parser. Synthetic vectors isolate malformed headers,
-truncation and payload lookalikes.
+truncation and payload lookalikes; they are separate from real encoded audio.
 
-Parser tests cover every header split, one-byte and deterministic varied chunks,
-multiple frames per chunk, split payloads, VBR/padding changes and split metadata.
-A lazy source repeats the 21-frame, 8777-byte frame-only fixture 8192 times:
-71,901,184 bytes and 172,032 frames, without writing or accumulating that input.
-This test proves correct traversal; the separate resource checks measure memory.
+Parser tests cover header and metadata splits, one-byte and varied chunks,
+multiple frames per chunk, incomplete payloads, VBR/padding changes, free-format
+boundary choices, search limits, cancellation and iterator release. Metadata
+cases distinguish usable extent information from unrelated tag fields, and
+retain failures for truncated extents or audio resuming after terminal metadata.
 
-A listening HTTP regression streams 12,000 repetitions of that fixture without
-accumulating the body: 105,324,000 file bytes exceed the former 100 MiB cap and
-must return 252,000 frames without a file-size override. It also catches an
-accidentally restored multipart dependency default. Multipart count limits,
-invalid-media recovery, deadlines and admission ownership remain separate checks.
+A controlled source supplies an invalid ID3 descriptor while withholding EOF.
+Rejection before another pull proves validation begins during reception.
+Event-loop cases cover both large producer chunks and many small chunks.
 
-A controlled incomplete source supplies an invalid ID3 descriptor while keeping
-EOF unavailable. Rejection before another pull proves parsing starts before EOF,
-which input consumption alone would not establish. Event-loop/cancellation cases
-cover both large chunks and many small chunks. Small split descriptors own their
-bytes, and tests check iterator closure and source backpressure.
+Two lazy large-input cases exercise traversal without collecting a complete body:
 
-The [005 compatibility matrix](../specs/005-incremental-mp3-parsing/spec.md#compatibility-matrix)
-explicitly replaces seek-based synthetic expectations. Tests now reject a free
-layout after a locally committed false boundary, enforce fixed distance/search/run
-bounds, prefer recognized forward metadata and bound unknown trailing suffixes.
-The fixture oracles, ordinary framing and truncated-extent assertions remain.
-The [S18 amendment](../specs/005-incremental-mp3-parsing/spec.md#count-only-metadata-amendment-2026-11-13)
-replaces metadata-conformance rejections with successful counts when lengths
-remain usable. Unit cases cover ignored fields, conflicting descriptors,
-forward/backward size ownership, fallback between suffix layouts and retained
-resource/cancellation bounds. Real HTTP cases count audio with differing ID3
-footers or APE reserved bytes and still reject truncated declared metadata.
+| Boundary                                                | File bytes  | Independent expected count |
+| ------------------------------------------------------- | ----------- | -------------------------- |
+| Domain stream: 8192 repetitions of the 21-frame fixture | 71,901,184  | 172,032                    |
+| Real HTTP: 12,000 repetitions of the same fixture       | 105,324,000 | 252,000                    |
+
+The HTTP case uses the default file-size policy and catches an unintended
+multipart file-size cap. These are correctness tests; memory measurements use
+the separate resource checks below.
 
 ## Deterministic lifecycle tests
 
-Use explicit barriers to hold parser work after an abort or response. Capacity,
-application drain and close must remain occupied until that work settles. Test
-owners release barriers and close sockets in `finally`; observation timeouts do
-not transfer ownership of the underlying operation.
+Barriers hold parser work after an abort or response. Capacity, application drain
+and close remain occupied until that work settles. Test owners release barriers
+and close sockets in `finally`; an observation timeout does not cancel the work.
 
-An unfinished HTTP epilogue now permits provisional parser work but prevents
-success and remains subject to the admission deadline. This supersedes 003 U05's
-old prohibition on counting before HTTP completion. Additional/malformed parts
-must reject even when the first file has already produced a valid count.
-
-Temporary-file creation/removal failures, orphan disposal, seek-window reads and
-filesystem readiness probes are obsolete in 005. Their resource guarantees are
-covered by stream closure, pending/failed parser ownership, iterator failures,
-transport recovery and accepting/draining readiness. No obsolete storage test is
-presented as execution evidence for the new responsibilities.
+An unfinished HTTP epilogue permits provisional counting but prevents success
+and remains subject to the admission deadline. Additional or malformed parts
+must reject even after a valid first-file count. Other cases cover stalled part
+headers, disconnects, deadlines, overload, independent apps, failed counters and
+recovery on a later request.
 
 ## Coverage and review
 
-Thresholds remain 90% statements, 85% branches, 90% functions and 90% lines over
-`src/`. Only executable `server.ts` and `healthcheck.ts` are excluded; compiled
-child-process tests exercise them separately. No new exclusion or lower threshold
-supports this migration.
+Coverage thresholds over `src/` are **90% statements, 85% branches, 90% functions
+and 90% lines**. Executable `server.ts` and `healthcheck.ts` are excluded from
+this coverage set and exercised by compiled child-process tests.
 
-Vitest writes ignored `reports/tests.json` and `coverage/` outputs. The active
-feature's [verification record](../specs/005-incremental-mp3-parsing/verification.md)
-contains actual commands, revision, results, compatibility decisions and review
-findings. Historical milestone evidence remains accurate for its own revision.
-Review the complete diff, changed checks and ownership paths as carefully as the
-parser. Coverage alone does not prove that an acceptance case exists.
+Vitest writes generated `reports/tests.json` and `coverage/` outputs. They are
+ignored by Git and regenerated on each run. The [verification summary](verification.md)
+records results and environment limitations. Review changed assertions, fixture
+oracles and ownership paths as well as production code; coverage alone does not
+establish that a requirement has a meaningful test.
 
 ## Process, platform and container checks
 
-Compiled process tests launch from an unrelated directory with spaces and check
-sample counting, safe configuration failures, private logs, real malformed
-multipart and silent healthcheck success/refusal/non-ready/deadline behavior.
-Held/failed parser fixtures replace the former disposal fixtures while preserving
-late-failure privacy, actual settled-work ownership and final shutdown bounds.
+Compiled process tests launch from a temporary directory containing spaces.
+They check startup, sample counting, probes, private logs, malformed multipart,
+late parser failures and bounded shutdown. The process fixture can observe parser
+entry, fail after cancellation or hold work indefinitely.
 
-Exactly **three tests skip native Windows** because child-process termination
+Exactly **three tests skip native Windows**, where child-process termination
 does not deliver POSIX signals to JavaScript handlers:
 
 - SIGTERM allows an admitted upload to complete during grace.
 - SIGINT grace expiry cancels an unfinished upload and awaits settled work.
 - Repeated signals do not reset the final bound for uncooperative parser work.
 
-The former POSIX FIFO readiness test is removed with filesystem probing. The
-three signal cases run on Linux/macOS; their skips do not claim equivalent Windows
-coverage. Docker's Linux process provides a separate real signal boundary even
-when invoked from Windows/macOS.
+These cases run on Linux and macOS. Docker's Linux process supplies a separate
+signal boundary on any supported host.
 
-The container smoke creates unique owned resources and finally removes them.
-It verifies a read-only root, non-root code execution, no writable upload mount,
-health, original-sample 6090, security/resource policy and clean stop. A missing
-Docker engine means unexecuted container evidence, not an equivalent text check.
+The container smoke script builds an image, creates uniquely named resources
+and removes them in `finally`. It checks read-only storage, the non-root user,
+code ownership, health, security/resource restrictions, the sample's 6090 frames
+and a clean stop. Docker must be available for those assertions to execute.
 
 ## Large-input resource checks
 
-Heavy checks remain separate from the normal gate:
+These checks are separate from the standard verification command:
 
-| Platform           | Isolated server process      | Constrained Linux container            |
-| ------------------ | ---------------------------- | -------------------------------------- |
-| Linux/Unix         | `npm run test:resources`     | `npm run test:resources:container`     |
-| macOS              | `npm run test:resources`     | `npm run test:resources:container`     |
-| Windows PowerShell | `npm.cmd run test:resources` | `npm.cmd run test:resources:container` |
+| Mode                        | Linux/Unix and macOS               | Windows PowerShell                     |
+| --------------------------- | ---------------------------------- | -------------------------------------- |
+| Isolated native process     | `npm run test:resources`           | `npm.cmd run test:resources`           |
+| Constrained Linux container | `npm run test:resources:container` | `npm.cmd run test:resources:container` |
 
-Inputs lazily repeat known frame-only fixture bytes to exceed 512 MiB, use test-only
-concurrency/deadline overrides, and compute expected counts from repetitions × 21.
-Neither client nor server constructs a complete upload. The native check samples
-server RSS/peak RSS in an isolated child and reports client memory separately;
-its generous 256 MiB server ceiling detects whole-file accumulation without
-relying on tiny baselines or brittle garbage-collection timing. JavaScript heap
-usage alone is not accepted as total-memory evidence.
+Both modes lazily repeat the 8777-byte, 21-frame fixture 61,168 times:
+**536,871,536 file bytes** and **1,284,528 expected frames**. The client retains
+one fixture block and respects backpressure. Concurrency and request deadlines
+use test settings.
 
-`scripts/resource-check.ts` writes ignored `reports/resources-native.json` or
-`reports/resources-container.json`. The native command builds first and launches
-the existing `dist/server.js` entrypoint. A measurement-only preload,
-`scripts/resource-monitor.ts`, reports server RSS and the OS high-water RSS over
-IPC; it creates no application or network listener and cannot keep shutdown alive.
-The check asserts and records the actual server entrypoint. Client observations
-are separate. The Docker command builds its image
-and needs no host dependency installation. Both measured server variants use a
-128 MiB old-space limit; the container additionally enforces 256 MiB total memory
-with swap disabled.
+The native command builds and launches `dist/server.js` with a measurement-only
+preload. It samples server RSS and the OS high-water RSS, checks a 256 MiB server
+ceiling, and reports client memory separately. The preload opens no listener and
+keeps no timer or IPC handle referenced. JavaScript heap usage alone is not the
+memory measurement.
 
-The container variant enforces 256 MiB total container memory, read-only root and
-no writable upload mount/tmpfs, then checks correct count and survival and records
-available container-memory observations. Fixed parser-state bounds, lazy input
-and process/container evidence complement one another. Read the
-[actual 005 results](../specs/005-incremental-mp3-parsing/verification.md) before
-claiming measurements or container execution. These checks establish their test
-envelope; they do not establish production throughput, p99 latency or fleet capacity.
+The container command builds its own image. It enforces 256 MiB total memory with
+swap disabled, a read-only root and no writable upload mount. It samples available
+container memory, checks the count and confirms that the service remains healthy.
+Both modes set a 128 MiB V8 old-space limit.
+
+Results go to `reports/resources-native.json` or
+`reports/resources-container.json`, including revision, working-tree state,
+runtime, timestamps and any unavailable environment. See [verification](verification.md)
+for recorded results. These tests establish their input and memory envelope;
+production throughput and capacity require representative load measurements.
 
 <a id="known-dependency-qualification"></a>
 
-## Retained dependency qualification
+## Dependency upgrade checks
 
-The earlier Fastify 5.12.8 / multipart 10.1.8 / Busboy 3.2.5 `app.inject` diagnostic
-exposed an unhandled part-stream error in a truncated over-limit second-part skip
-path. That diagnostic remains historical dependency-risk evidence. Current
-compiled-process regressions exercise malformed second parts over Content-Length
-and chunked real HTTP; their execution/results belong in the active record.
-No private dependency patch, global exception handler or weakened multipart limit
-hides the issue. Qualify a proposed upstream change with isolated reproduction
-and the real-wire regressions before changing the pin.
+Multipart parsing depends on stream event ordering. The compiled-process cases
+send malformed second parts over both Content-Length and chunked HTTP, and check
+safe responses, continued readiness and private logs. Retain these real-wire
+regressions when upgrading Fastify or multipart dependencies, and reproduce any
+new failure in isolation. Passing the suite covers its cases, rather than every
+possible dependency event ordering.

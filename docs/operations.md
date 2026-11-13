@@ -1,9 +1,8 @@
-﻿# Operations
+# Operations
 
 The deployment target is a Linux container. See [development](development.md)
-for native Linux/Unix, macOS and Windows commands. The
-[005 verification record](../specs/005-incremental-mp3-parsing/verification.md)
-separates actual checks/measurements from supplied but unexecuted checks.
+for native Linux/Unix, macOS and Windows commands, and
+[verification](verification.md) for measured results and their scope.
 
 ## Configuration
 
@@ -26,10 +25,8 @@ Normal schema coercion accepts numeric strings such as `+1`, `1e3` and ` 3000`
 when their converted values are integers within range. Fractional, non-finite
 and out-of-range values are rejected. Validation ranges are not recommended
 production budgets. Concurrency and deadlines must fit measured workload and
-memory. There is no application file-size
-cap; `MAX_FILE_BYTES` has been removed and no longer affects configuration.
-`UPLOAD_TEMP_DIR` was removed in 005: uploads have no filesystem staging or storage
-dependency.
+memory. There is no application file-size cap or upload storage directory;
+file bytes flow directly to the parser.
 
 ## Health and admission
 
@@ -39,8 +36,7 @@ dependency.
 | `GET /health/ready` | 200, `{"status":"ready"}` | 503, `{"status":"not-ready"}` after admission stops |
 
 Readiness reflects accepting work. Temporary saturation leaves readiness healthy;
-excess uploads receive 503 with `Retry-After: 1`. No filesystem startup/readiness
-probe or replacement external dependency is involved.
+excess uploads receive 503 with `Retry-After: 1`.
 
 The compiled `dist/healthcheck.js` probes readiness with an absolute two-second
 deadline and discards the body. It exits silently: zero only after HTTP 200
@@ -51,11 +47,11 @@ three retries.
 
 ## Container policy and memory
 
-The [Dockerfile](../Dockerfile) retains the digest-pinned Node 24.22.3 Bookworm
+The [Dockerfile](../Dockerfile) uses a digest-pinned Node 24.22.3 Bookworm
 Slim base. Its runtime payload is compiled JavaScript, production dependencies
 and package.json. Root owns code; the process runs as `node:node`.
 
-The documented/smoke launch uses a read-only root, init, dropped capabilities,
+The documented launch and smoke test use a read-only root, init, dropped capabilities,
 no new privileges, one CPU, 128 PIDs and a 1 GiB memory limit. It has **no writable
 upload mount and no upload tmpfs**. Runtime restrictions come from the launch
 command; a Dockerfile alone does not enforce them.
@@ -84,7 +80,6 @@ Rejected bodies are consumed only within a 64 KiB allowance plus one crossing
 chunk and the admission deadline, then their connection closes. An actively
 sending client may observe a reset before reading error JSON.
 
-There are no uploaded files to delete, disposal failures or upload orphan cleanup.
 Each replica owns its local budget and stream state. Requests need no shared
 filesystem, lock or session affinity; local admission is not a fleet/tenant quota.
 For Kubernetes HPA integration, active uploads per instance is the preferred
@@ -110,7 +105,7 @@ Windows child-process kill is not POSIX graceful-shutdown evidence.
 
 Generated request IDs and fixed event/route values support diagnosis. Events
 cover startup, request completion, unexpected processing failures and shutdown.
-The old storage-cleanup log category is removed. Uploaded bytes, filenames,
-headers, raw URLs/queries, paths, exception messages and arbitrary child context
+Uploaded bytes, filenames, headers, raw URLs/queries, paths, exception messages
+and arbitrary child context
 are excluded even at trace level. Correlate safe events and resource observations,
 then reproduce failures with nonprivate inputs.

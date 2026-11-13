@@ -1,4 +1,4 @@
-﻿# Architecture
+# Architecture
 
 ## Domain and transport boundary
 
@@ -15,11 +15,10 @@ input before publishing the count. A provisional count never permits early
 success. App construction and process startup remain separate; mutable state
 belongs to an application or request.
 
-The service continues to start through `src/server.ts` (`dist/server.js` after
-compilation), using the existing app factory and upload route. That route passes
-`part.file` directly to the counter. The resource check launches this same
-entrypoint; its optional memory-monitor preload does not construct an app or
-open a network listener.
+The entrypoint is `src/server.ts` (`dist/server.js` after compilation). It creates
+the app and starts the listener. The upload route passes `part.file` directly to
+the counter. Resource tests launch the compiled entrypoint with a preload that
+only measures memory.
 
 | File                      | Responsibility                                                               |
 | ------------------------- | ---------------------------------------------------------------------------- |
@@ -39,9 +38,8 @@ open a network listener.
 | `src/mp3/count.ts`        | Frame traversal and physical counting                                        |
 | `src/mp3/error.ts`        | Domain invalid-media error                                                   |
 
-Read app, upload route, then count to follow a request. Biome enforces parser
-independence; harness tests exercise the actual permitted/forbidden imports.
-There is no DI container or generic streaming framework.
+To follow a request, read `app.ts`, `upload/route.ts`, then `mp3/count.ts`.
+Biome's import restrictions and their tests enforce parser independence.
 
 For a first tour of the parser, read the [MP3 guide](mp3.md), then `count.ts`
 and `header.ts`. The counter has three phases: leading metadata, audio and
@@ -68,16 +66,11 @@ the parser's bound is not a claim about total process RSS.
 
 A new free-format run commits the first compatible boundary within a 128 KiB
 unpadded distance. A stream has at most 4096 inference runs and 16 MiB of charged
-inference positions. There is one inferred length/rate, no rollback stack or
-completed-file-size budget. A later contradiction rejects the stream. Declared
+inference positions. The parser keeps one inferred length/rate for each run;
+a later contradiction rejects the stream. Declared
 metadata bodies are skipped by length; unknown footer-only terminal bytes have a
 64 KiB buffer and at most 4096 alternative-chain selections. See the
-[MP3 guide](mp3.md) and [005 compatibility matrix](../specs/005-incremental-mp3-parsing/spec.md#compatibility-matrix).
-
-Feature 005 removes temporary upload files, directory creation/removal, seek
-infrastructure, disposal seams, filesystem readiness probes, `UPLOAD_TEMP_DIR`
-and upload tmpfs mounts. Earlier staging choices and verification remain in the
-historical feature records; current processing has no upload storage dependency.
+[MP3 guide](mp3.md) for boundary rules and examples.
 
 ## Upload resource ownership
 
@@ -109,8 +102,8 @@ operation deliberately ignoring cancellation still occupies its slot.
 The default policy is four concurrent uploads and a 30-second
 admission-to-processing deadline, with no application file-size cap. Busy/draining
 requests receive safe 503 JSON, `Retry-After: 1` and a closing connection without
-queuing. Rejected input has a
-64 KiB drain allowance plus at most one delivered chunk and the same deadline.
+queuing. Rejected input has a 64 KiB drain allowance plus at most one delivered
+chunk and the same deadline.
 Normal completed request-body closure does not cancel parsing. An unfinished
 HTTP epilogue may follow provisional counting but prevents success and remains
 subject to the deadline.
@@ -126,22 +119,22 @@ Configuration uses shared `env-schema` definitions, is frozen and passed
 explicitly. It is resolved before creating Fastify so the logger and standalone
 healthcheck use the same policy. Only process entrypoints read environment values
 or register signals. Readiness reflects accepting work; temporary upload saturation
-leaves the replica ready. Liveness reflects a
-responding process. No filesystem or replacement dependency is probed.
+leaves the replica ready. Liveness reflects a responding process.
 
 Generated request IDs and fixed route/event/category values support diagnosis.
 The logger reconstructs safe events through the root logger so arbitrary objects,
 exception text and child bindings cannot introduce private context.
 
-Keep Node 24.22.3, TypeScript 7.0.2, Fastify/multipart, env-schema, Vitest and Biome
-at the pinned versions for this feature. Strict NodeNext/ESM checking remains distinct
-from native development type stripping; production executes compiled JavaScript.
-The Linux image and launch commands retain non-root execution, a read-only root
-and explicit resource/security limits, with no writable upload mount.
+The runtime dependencies are Fastify, `@fastify/multipart` and `env-schema`.
+Versions are pinned in `package.json` and the lockfile; `.nvmrc` pins Node.
+Strict NodeNext/ESM compilation checks types, while development mode runs source
+through Node's type stripping. Production executes compiled JavaScript.
+The Linux image runs as a non-root user; the documented launch adds a read-only
+root and resource limits. Uploads require no writable filesystem.
 
 Separate heavy [resource checks](testing.md#large-input-resource-checks) use lazy
 inputs larger than their server/container budget. Actual measurements and
-unavailable environments belong in [005 verification](../specs/005-incremental-mp3-parsing/verification.md).
+their scope are summarized in [verification](verification.md).
 
 ## Future changes
 

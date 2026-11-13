@@ -1,128 +1,86 @@
 # Assignment acceptance and verification
 
-The [original assignment](assignment.pdf) requires TypeScript, a POST upload
-endpoint, logical MPEG-1 Layer III frame counting without an MP3 parser package,
-useful errors, scalability, clear running instructions and evidence of structured
-Git use. [001](../specs/001-count-uploaded-mp3/verification.md),
-[002](../specs/002-complete-mp3-compatibility/verification.md),
-[003](../specs/003-bound-upload-resource-use/verification.md) and
-[004](../specs/004-operate-containerized-service/verification.md) preserve
-revision-specific evidence. Read those records as historical milestones.
-
-Feature [005](../specs/005-incremental-mp3-parsing/spec.md) selects the current
-incremental architecture. Its [verification record](../specs/005-incremental-mp3-parsing/verification.md)
-contains the tested revision, complete gate/resource results, compatibility
-supersessions, replaced storage/seek cases and remaining qualifications. Use that
-record for current execution claims; the milestone sections below preserve the
-original literal dates, counts and tested hashes.
+This page maps the [assignment](assignment.pdf) to the delivered service and
+summarizes the checks performed. For setup and a manual sample upload, follow
+the [README](../README.md).
 
 ## Acceptance map
 
-| Requirement                                        | Implementation and evidence                                                                                                                                                                                                                              |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST `/file-upload`, exact JSON and headers        | Scoped Fastify upload route; real HTTP and compiled-process original-sample cases assert 200, JSON content type and exactly `{"frameCount":6090}`                                                                                                        |
-| Use TypeScript effectively                         | All executable source, tests, scripts and runner config use strict TypeScript; NodeNext/ESM, discriminated headers, explicit ownership and immutable configuration                                                                                       |
-| Parse frames logically; no media parser dependency | `src/mp3/` traverses headers and frame extents itself; only Fastify and multipart are runtime dependencies; independent fixture evidence establishes expected counts                                                                                     |
-| MPEG-1 Layer III correctness                       | CBR/VBR/free-format, padding, mono/stereo, CRC-bearing framing, supported ID3/APE envelopes and physical Xing/Info carriers; unit/component vectors plus six real MP3 assets                                                                             |
-| Other MPEG versions outside scope                  | Valid MPEG-2 fixture receives a useful rejection; no decoder/transcoder or out-of-scope version implementation                                                                                                                                           |
-| Graceful and useful errors                         | Typed invalid-media failures; 400/413/415/503 contract and generic unexpected 500; rejected/aborted transport, partial multipart and recovery tested through real sockets                                                                                |
-| Large files and scalability                        | Direct incremental file-stream counting, fixed parser state/search/suffix bounds and settled stream/parser admission; lazy 71,901,184-byte / 172,032-frame traversal and separate >512 MiB process/container resource checks; actual measurements in 005 |
-| Standardized maintainable code                     | Biome, strict compiler, small domain/transport/runtime modules, ownership/format comments and architecture/MP3 guides                                                                                                                                    |
-| Automated unit and integration tests               | Vitest pure/component tests, listening HTTP/socket cases, compiled process tests and separate actual-container smoke script; one portable `verify` command                                                                                               |
-| Supplied sample and real fixtures                  | Unchanged 1,458,172-byte sample, SHA-256 `97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3`; manifest/hash tests and independently established expectations                                                                              |
-| Effective Git and structured approach              | Bootstrap and sequential Lean cycles: spec, plan and tasks committed before implementation, cohesive source/test commits and preserved review evidence; 005 explicitly supersedes seek/storage choices                                                   |
-| Demonstrated Spec Kit Lean                         | Five unchanged official Lean skills with pinned provenance/hash checks; a constitution, explicit feature pointer and separate artifacts for each capability, not one retroactive umbrella spec                                                           |
-| Local Codex / editor workflow                      | Concise AGENTS.md and SKILLS.md, focused review skill, VS Code tasks, advisory project configuration and explicit Linux/Unix/macOS/Windows commands                                                                                                      |
-| Container/distributed operation                    | Non-root digest-pinned image, read-only root with no writable upload mount, explicit resource/security policy, safe logs, readiness, bounded shutdown and no shared-file/session affinity; execution qualifications in 005                               |
-| Clear setup and manual confirmation                | README install/gate/start/sample commands; development guide covers environments, VS Code/Codex, platform differences and Docker                                                                                                                         |
-| Candidate ownership                                | Team guide asks for independent explanation, unfamiliar-case prediction and review; measured adoption, improved delivery and human approval are not inferred from generated artifacts                                                                    |
+| Requirement                             | Implementation and evidence                                                                                                                        |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript                              | Source, tests, scripts and runner configuration use strict TypeScript with NodeNext/ESM checking.                                                  |
+| POST `/file-upload`                     | Fastify accepts one multipart file named `file`; real HTTP and compiled-process tests exercise the endpoint.                                       |
+| Correct JSON and headers                | The sample returns HTTP 200, JSON content type and exactly `{"frameCount":6090}`. Upload errors contain one `error` string.                        |
+| Logical MPEG-1 Layer III frame counting | `src/mp3/` walks headers and complete frame extents, including physical Xing/Info carriers, without relying on duration or advertised totals.      |
+| No MP3 parsing package                  | The counter is implemented locally. Runtime packages are Fastify, `@fastify/multipart` and `env-schema`.                                           |
+| Other MPEG versions outside scope       | A valid MPEG-2 fixture is rejected; the parser supports MPEG-1 Layer III only.                                                                     |
+| Useful error handling                   | Typed errors map to 400/413/415/503 responses or a generic 500. Real HTTP tests cover invalid input, disconnects, deadlines and recovery.          |
+| Large-file handling                     | Direct streaming, bounded parser state, cooperative yielding and per-app admission; lazy correctness tests and an independent native memory check. |
+| Maintainable code and tools             | Small parser, transport and runtime modules; descriptive ownership/format comments; Biome, strict typechecking and Vitest coverage.                |
+| Independent expectations                | Six committed audio fixtures have documented hashes and counts; tests use the manifest rather than parser output to establish answers.             |
+| Git and a structured approach           | The repository includes source and test history. The architecture, format rules, test strategy and deployment limits are documented.               |
+| Running and testing instructions        | The README and development guide provide Linux/Unix, macOS and native Windows commands, including a sample upload.                                 |
 
-The source count is structural. It does not validate compressed samples, CRC
-values or metadata conformance beyond boundary fields. See
-[MP3 limits](mp3.md#deliberate-limits) and
-[operations](operations.md) for ingress and resource boundaries. Parsing begins
-before EOF; success still requires complete valid file, multipart and HTTP input.
+## Scope of correctness
 
-## Current incremental acceptance
+The service supports indexed CBR/VBR and bounded free-format inference, with
+supported ID3 and APE metadata. It counts structurally identifiable frames;
+compressed samples and CRCs are not decoded or validated. Metadata fields are
+checked where needed to locate boundaries. Incorrect declared lengths can obscure
+audio, and free-format ambiguity or excessive search work can cause rejection.
+See [MP3 limits](mp3.md#deliberate-limits).
 
-| 005 requirement | Current implementation and check                                                                                                                                                 |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S01–S04         | Async byte-source domain API, per-header CBR/VBR traversal, unchanged fixture oracles and provisional work before EOF with complete-success transport validation                 |
-| S05–S09         | 128 KiB free-frame distance, 4096 inference runs, 16 MiB inference positions, at most 64 KiB unknown terminal suffix, bounded alternatives and cooperative yielding/cancellation |
-| S10–S11         | Direct multipart file stream, limits, truncation, safe errors and admission held until parser/stream/rejection settlement; actual HTTP/process regressions                       |
-| S12             | No upload storage/configuration/probes/disposal; readiness follows accepting work while saturation alone stays healthy                                                           |
-| S13–S14         | Read-only mount-free deployment, independent lazy large-input checks with server memory observations, unchanged gates/fixtures and local Lean commit sequence                    |
+The supplied sample is **1,458,172 bytes**, with SHA-256
+`97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3`.
+Its independent expectation is 6089 decoder packets plus one physical Xing
+carrier: **6090 frames**. The [fixture guide](../tests/fixtures/README.md) gives
+the evidence for every asset, including the free-format fixture's retained LAME
+authoring evidence. A fresh LAME decode is not part of the normal test suite.
 
-The [compatibility matrix](../specs/005-incremental-mp3-parsing/spec.md#compatibility-matrix)
-documents local free-format commitment and bounded footer-only metadata instead
-of silently claiming the old seek-dependent behavior. The heavy checks write
-`reports/resources-native.json` and `reports/resources-container.json`; these
-generated artifacts and the active verification record distinguish observations
-from configured limits. No production throughput or fleet-capacity claim follows
-from them.
+## Verification results
 
-## Historical 004 application gate
+Executed on **2026-11-13**, using native **Windows x64**, Node **24.22.3** and
+npm **11.19.1**. The working tree was based on
+`5bdb1ea197427685ce0e4705fe3d33658e0661e4`, with README/documentation edits
+pending. Production code, tests, fixtures and build configuration were unchanged.
 
-The clean revision `a67beed776cbeb663f44640f27f5081a4a46555d` passed
-`npm run verify`: lint, strict typecheck, clean compilation and **318 tests
-across 19 files** (225 unit/component, 93 integration, no failures or skips).
-Coverage is 96.99% statements, 95.59% branches, 97.64% functions and 99.35% lines.
-The [004 record](../specs/004-operate-containerized-service/verification.md)
-explains review corrections, red/green regressions and the precise coverage scope.
-Subsequent evidence/merge commits do not change application behavior.
+`npm.cmd run verify` passed lint, strict typechecking, a clean build and coverage:
+**370 passed, zero failed, three expected POSIX-signal skips**, across 20 test
+files. Coverage was **97.95% statements, 96.08% branches, 97.61% functions and
+99.23% lines**. The sample returned its expected count and all six fixture
+identity/expectation checks passed.
 
-## Historical 004 native Windows follow-up
+After that build, `node scripts/resource-check.ts` passed against the compiled
+`dist/server.js` entrypoint:
 
-On 2026-11-12, native Windows x64 with Node 24.22.3 / npm 11.19.1 reproduced
-one failure and four skips at base `b8e43ab8bf99b9aeffcc23308a371ff65f3273b7`.
-The oversized-rejection test required a delivered HTTP response even though U06
-allows a reset before delivery. The working-tree correction accepts only the exact
-415 JSON or `ECONNRESET`, retaining closure/ownership checks and adding no-parser,
-no-retained-data and recovery assertions; application behavior is unchanged.
+| Measurement                                   | Result                            |
+| --------------------------------------------- | --------------------------------- |
+| Lazy file bytes                               | 536,871,536                       |
+| Independent expected and returned frame count | 1,284,528                         |
+| Server baseline RSS                           | 79,888,384 bytes                  |
+| Server peak RSS                               | 93,376,512 bytes (about 89.1 MiB) |
+| Server memory ceiling                         | 268,435,456 bytes (256 MiB)       |
+| Memory observations                           | 60                                |
+| Separate client peak RSS                      | 73,842,688 bytes                  |
+| Liveness after upload                         | Passed                            |
 
-`npm.cmd ci --ignore-scripts` succeeded, and the corrected `npm.cmd run verify`
-passed lint, typecheck, build and coverage: **314 passed, zero failed, four
-skipped**, with the same coverage percentages and thresholds as the Linux gate
-above. The skips are the three POSIX shutdown signal tests and one POSIX FIFO/
-SIGUSR2 readiness ownership test. See the [004 follow-up record](../specs/004-operate-containerized-service/verification.md#native-windows-follow-up-2026-11-12)
-for review, regression evidence and limits. Linux/macOS, Docker and hosted CI were
-not rerun for this correction.
+The resource report records execution at **05:31:23.476-05:31:25.406 UTC**,
+the revision above and `workingTreeDirty: true`. Generated results are in
+`reports/tests.json`, `coverage/` and `reports/resources-native.json`; commands
+regenerate these ignored outputs. The measurements apply to this run and input.
 
-## Historical milestone evidence scope
+## Deployment qualification
 
-The original milestone application gates use Linux x64 and Node 24.22.3. Historical
-counts remain 125 tests for 001, 187 for 002 and 227 for 003; the final operational
-cycle has 318. Coverage percentages measure only the stated
-source set; `server.ts` and `healthcheck.ts` are exercised as compiled child
-processes outside that coverage set.
+The [CI workflow](../.github/workflows/verify.yml) configures Linux, macOS and
+Windows application jobs and a Linux container job. Its presence does not establish
+a hosted run or repository branch-protection settings.
 
-The original and indexed additional fixtures were independently checked using
-FFprobe/FFmpeg 7.1.5. The free-format fixture's identity and 1,200-byte spacing were
-freshly checked; its retained LAME 3.100 authoring/decode evidence was not rerun
-because that tool was unavailable. Its 22-frame oracle is not derived from the
-application parser. See [fixture provenance](../tests/fixtures/README.md).
+The container smoke and memory checks require Docker. The Docker executable is
+unavailable in this environment, so those checks were not run for this revision.
+The [development guide](development.md#run-the-linux-container) provides commands
+to run those checks in an environment with a Linux Docker engine.
 
-## Historical milestone qualification
-
-- The actual Docker smoke was attempted and stopped at preflight because the
-  Docker executable was absent (`spawn docker ENOENT`). No image build, runtime
-  restriction, container upload, disposal or stop check is claimed as executed.
-- Native macOS and hosted CI remain unexecuted in these records. Native Windows
-  was verified in the follow-up above; the original Linux milestone did not run
-  Windows. POSIX-only signal/filesystem test mechanisms do not claim equivalent
-  native Windows coverage.
-- The known multipart dependency skip-path qualification and the fresh real-wire
-  regressions are described in [testing](testing.md#known-dependency-qualification).
-  Passing those transport cases does not establish all dependency event orderings.
-- Peak RSS/tmpfs/CPU, throughput, overload under representative production traffic
-  and ingress integration still need measurement. Configured quotas are not a
-  benchmark or a fleet-wide limit.
-- Hosted required checks, independent human approvals and permissions need
-  maintainer configuration. Team adoption and net delivery improvement need a
-  real pilot; the repository does not fabricate those outcomes.
-
-The final source gate is recorded in the operational feature. The release archive
-is subsequently checked for complete Git history, fixture/skill identities and a
-clean checkout, then installed and verified from its actual extraction. The
-delivery report identifies that archive and its extraction result without
-rewriting earlier milestone evidence.
+Native Windows skips three POSIX shutdown-signal tests. Linux/macOS process
+handlers and hosted jobs were not executed in this documentation pass. Production
+throughput, tail latency and fleet capacity require representative load testing;
+the lazy resource check measures only its stated input and process envelope.

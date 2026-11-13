@@ -1,4 +1,4 @@
-﻿# MP3 framing for this assignment
+# MP3 framing
 
 The service counts **physical MPEG-1 Layer III frames** from incoming bytes.
 It does not decode audio, estimate duration, or trust advertised frame totals.
@@ -72,14 +72,12 @@ indexed traversal does not consume the inference-search budget. Searches run in
 bounded synchronous windows, check cancellation and yield to the event loop at
 least every 64 KiB of byte progress.
 
-This replaces 002's complete-suffix/depth-first retry policy. For example, a
-500-byte frame containing compatible headers at offsets 100 and 200 can lure a
-100-byte interpretation that fails later. The seek parser could rewind and try
-500; the streaming parser rejects after its local choice fails. Retaining every
-possible retry until EOF would defeat a fixed memory bound. The unchanged real
-free-format fixture's first compatible boundary is 1200 bytes and still yields
-22 frames. The [005 matrix](../specs/005-incremental-mp3-parsing/spec.md#compatibility-matrix)
-records all superseded synthetic expectations.
+For example, a 500-byte frame containing compatible headers at offsets 100 and
+200 can suggest a 100-byte interpretation that fails later. The parser commits
+to that first boundary and rejects when the layout contradicts it. Retaining
+every possible interpretation until EOF would defeat the fixed memory bound.
+The real free-format fixture has its first compatible boundary at 1200 bytes
+and yields 22 frames.
 
 ## Metadata at established boundaries
 
@@ -143,15 +141,14 @@ layout flags. Relaxed metadata checks can admit extra possible suffix layouts.
 The alternative-search limit still applies, so inputs with excessive overlapping
 interpretations can be rejected even if one layout would eventually fit.
 
-Primary format references: [ID3v2.4 structure](https://id3.org/id3v2.4.0-structure),
-[APEv2 specification](https://wiki.hydrogenaudio.org/index.php?title=APEv2_specification)
-and [TagLib's bundled APE format](https://github.com/taglib/taglib/blob/master/taglib/ape/ape-tag-format.txt).
+Primary format references: [ID3v2.4 structure](https://id3.org/id3v2.4.0-structure)
+and [APE specification distributed with TagLib](https://raw.githubusercontent.com/taglib/taglib/master/taglib/ape/ape-tag-format.txt).
 These references describe the formats; the counter uses only their boundary fields.
 
 ## Physical carriers and independent expectations
 
 Xing/Info data can occupy a genuine MPEG frame. Count that carrier even when a
-decoder omits it from audio packets. The unchanged sample has 6089 decoder packets
+decoder omits it from audio packets. The supplied sample has 6089 decoder packets
 plus one Xing carrier: **6090 physical frames**. The VBR fixture has 22 packets
 plus one carrier; the real free-format fixture has 22 frames at 1200-byte intervals.
 The [fixture guide](../tests/fixtures/README.md) preserves hashes and independent

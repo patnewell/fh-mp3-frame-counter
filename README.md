@@ -1,134 +1,143 @@
 # MP3 frame counter
 
-Upload an MPEG-1 Layer III file to `POST /file-upload` and receive its physical
-frame count. The supplied sample returns exactly `{"frameCount":6090}`.
+A TypeScript and Fastify service that counts physical MPEG-1 Layer III frames
+from an uploaded file. It parses frame headers as bytes arrive, without storing
+the upload or buffering the complete file in memory.
 
-The service uses TypeScript and Fastify. It reads MPEG headers itself; no media
-parsing dependency supplies the count. The [original assignment](docs/assignment.pdf)
-is included. Five [sequential Spec Kit Lean cycles](specs/README.md) show the
-contract, plan, tasks, implementation, review and verification of each capability.
+## Quick start
 
-## Run and verify
+Install **Node 24.22.3** (pinned in [.nvmrc](.nvmrc)), then run these commands
+from the repository root. The [development guide](docs/development.md) covers
+installation and editor setup.
 
-Install **Node 24.22.3** and Git. The [development guide](docs/development.md) gives
-explicit installers, editor setup and command equivalents for every platform.
-From the extracted repository directory, run the applicable block and stop if a
-command fails.
-
-**Linux/Unix or macOS**:
+**Linux/Unix and macOS:**
 
 ```sh
 npm ci --ignore-scripts
 npm run verify
-node dist/server.js
+npm start
 ```
 
-**Native Windows PowerShell**:
+**Windows PowerShell:**
 
 ```powershell
 npm.cmd ci --ignore-scripts
 npm.cmd run verify
-node dist/server.js
+npm.cmd start
 ```
 
-`verify` lints, typechecks, builds and runs unit/integration tests with coverage.
-Normal tests need no database, media encoder or Docker daemon. The server listens
-on `http://127.0.0.1:3000`.
+`verify` runs lint, typechecking, a clean build, and tests with coverage. The
+standard suite needs no database, media encoder or Docker engine. On Windows,
+three POSIX shutdown-signal tests are skipped; they run on Linux and macOS.
 
-On native Windows, expect **three skipped tests** that require POSIX shutdown
-signals. They run on Linux/macOS; Windows process termination does not exercise those
-mechanisms. All other tests must pass. See [test details](docs/testing.md#process-platform-and-container-checks).
+The server listens at `http://127.0.0.1:3000` by default. Stop it with Ctrl+C.
 
-From another terminal at the repository root:
+## Upload a file
 
-| Platform           | Upload command                                                                                  |
-| ------------------ | ----------------------------------------------------------------------------------------------- |
-| Linux/Unix         | `curl --include --form 'file=@tests/fixtures/sample.mp3' http://127.0.0.1:3000/file-upload`     |
-| macOS              | `curl --include --form 'file=@tests/fixtures/sample.mp3' http://127.0.0.1:3000/file-upload`     |
-| Windows PowerShell | `curl.exe --include --form 'file=@tests/fixtures/sample.mp3' http://127.0.0.1:3000/file-upload` |
+From another terminal at the repository root, upload the included sample.
 
-Expect HTTP 200 and `{"frameCount":6090}` with an `application/json` content type.
-Let curl generate the multipart boundary. Stop the server with Ctrl+C.
-`GET /health/live` and `GET /health/ready` expose process liveness and whether
-the application is accepting work. Upload saturation alone does not fail readiness.
+**Linux/Unix and macOS:**
 
-## HTTP contract
+```sh
+curl --include --form 'file=@tests/fixtures/sample.mp3' http://127.0.0.1:3000/file-upload
+```
 
-Send one multipart file named `file` and no extra fields. File bytes determine
-format; filenames and part MIME claims are ignored. Content encoding must be
-absent or `identity`. Success contains only a positive integer `frameCount`.
+**Windows PowerShell:**
 
-| Status | Meaning                                                                      |
-| ------ | ---------------------------------------------------------------------------- |
-| 200    | Complete supported framing counted                                           |
-| 400    | Missing/wrong/empty file, malformed multipart, unsupported or invalid MPEG   |
-| 413    | File-count, field-count or part-count limit                                  |
-| 415    | Unsupported request content type or encoding                                 |
-| 503    | Upload capacity full, admission stopped or admitted request deadline expired |
-| 500    | Safe generic unexpected processing failure                                   |
+```powershell
+curl.exe --include --form 'file=@tests/fixtures/sample.mp3' http://127.0.0.1:3000/file-upload
+```
 
-Upload error JSON has one `error` string. A sender still uploading rejected data can
-observe a connection close before reading the error. There is no application
-file-size limit. Defaults are four concurrent uploads per app and a 30-second
-admission-to-processing deadline. Busy/draining responses include `Retry-After: 1`.
-The parser consumes file bytes as they arrive, with no upload file, tmpfs or complete in-memory
-buffer. Success waits for valid file EOF, multipart completion and the complete
-HTTP body. Cancellation does not release capacity while stream/parser/rejection
-work remains unsettled.
+Expect HTTP 200 with `Content-Type: application/json` and `{"frameCount":6090}`.
+Replace the sample path to count another file; let curl set the multipart boundary.
 
-The existing startup remains `src/server.ts` → `src/app.ts` →
-`src/upload/route.ts`. The upload route calls the counter with the incoming
-multipart file stream directly. The resource check runs this same compiled
-server; it has no separate application bootstrap.
+## API
 
-Ordinary CBR/VBR uses each frame's header. Free-format commits the first
-compatible boundary within 128 KiB, with fixed search/run limits. Declared
-metadata bodies are skipped incrementally; an unknown footer-only suffix is
-limited to 64 KiB. Metadata fields are checked only where needed to locate
-boundaries; unrelated tag defects do not invalidate a count. The
-[MP3 guide](docs/mp3.md) explains these streaming compatibility rules and their
-deliberate differences from the historical seek parser.
+`POST /file-upload` accepts `multipart/form-data` containing exactly one file
+field named `file`, with no extra fields. Format detection uses file bytes;
+filenames and part MIME types do not affect the count. `Content-Encoding` must
+be absent or `identity`.
 
-## Container evaluation
+Supported input is MPEG-1 Layer III audio (CBR, VBR or free-format) with optional
+ID3 or APE metadata. The count includes physical Xing/Info carrier frames. See
+the [MP3 guide](docs/mp3.md) for format rules and search limits.
 
-Install a running Linux Docker engine; Docker Desktop must use Linux containers
-on macOS/Windows. The smoke command builds an isolated image/container, checks
-runtime restrictions, health, the original sample and clean stop, then
-removes its resources.
+| Status | Meaning                                                                               |
+| ------ | ------------------------------------------------------------------------------------- |
+| 200    | Complete supported framing; JSON contains one positive integer `frameCount`           |
+| 400    | Missing, wrong or empty file field; malformed multipart; unsupported or invalid audio |
+| 413    | Too many files, fields or multipart parts                                             |
+| 415    | Unsupported request content type or encoding                                          |
+| 503    | Upload capacity full, service draining or upload deadline expired                     |
+| 500    | Unexpected processing failure                                                         |
 
-| Platform           | Container smoke              |
-| ------------------ | ---------------------------- |
-| Linux/Unix         | `npm run test:container`     |
-| macOS              | `npm run test:container`     |
-| Windows PowerShell | `npm.cmd run test:container` |
+Upload errors return JSON with one `error` string. Busy and draining responses
+include `Retry-After: 1`. Rejected connections close; a client still sending data
+may see a reset before receiving the error.
 
-The container uses a read-only root with no writable upload mount. Separate heavy
-resource checks lazily send over 512 MiB with test-only concurrency/deadline settings:
+There is no application file-size cap. Success waits for the complete file,
+multipart body and HTTP body. Deadlines and disconnects cancel processing;
+capacity stays occupied until the request's work and cleanup settle. See
+[operations](docs/operations.md) for deployment limits and ingress responsibilities.
 
-| Platform           | Isolated process             | Constrained Linux container            |
-| ------------------ | ---------------------------- | -------------------------------------- |
-| Linux/Unix         | `npm run test:resources`     | `npm run test:resources:container`     |
-| macOS              | `npm run test:resources`     | `npm run test:resources:container`     |
-| Windows PowerShell | `npm.cmd run test:resources` | `npm.cmd run test:resources:container` |
+`GET /health/live` returns 200 with `{"status":"ok"}`. `GET /health/ready` returns
+200 with `{"status":"ready"}` while admission is open, or 503 with
+`{"status":"not-ready"}` during draining. Upload saturation alone does not fail readiness.
 
-These checks report server memory separately from client memory. The container
-variant uses a 256 MiB budget and no upload storage. See the
-[005 verification record](specs/005-incremental-mp3-parsing/verification.md) for
-actual measurements and any unexecuted checks; supplied scripts alone are not measurements.
+## Configuration
 
-See [development](docs/development.md#run-the-linux-container) for manual launch
-commands and [operations](docs/operations.md) for resource sizing and ingress
-responsibilities. [Verification](docs/verification.md) separates actual results
-from configured Docker/native/hosted checks that remain unexecuted.
+Set environment variables before starting the server. A `.env` file is not loaded
+automatically. [src/config.ts](src/config.ts) defines defaults and validation.
 
-## Read the implementation
+| Variable             | Default     | Purpose                                                                       |
+| -------------------- | ----------- | ----------------------------------------------------------------------------- |
+| `HOST`               | `127.0.0.1` | Listening address; the container defaults to `0.0.0.0`                        |
+| `PORT`               | `3000`      | Listening port                                                                |
+| `MAX_UPLOADS`        | `4`         | Maximum concurrent uploads per app instance                                   |
+| `REQUEST_TIMEOUT_MS` | `30000`     | Deadline from upload admission through processing                             |
+| `SHUTDOWN_GRACE_MS`  | `10000`     | Drain time before active connections are closed                               |
+| `LOG_LEVEL`          | `info`      | Logging level: `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
-- [Architecture](docs/architecture.md): domain boundary, stream ownership and incremental counting.
-- [MP3 format](docs/mp3.md): headers, frame lengths, tags and physical carrier counts.
-- [Development](docs/development.md): native platform, VS Code, Codex and Git workflow.
-- [Fixture evidence](tests/fixtures/README.md): unchanged assets and independent expectations.
-- [Testing](docs/testing.md): real boundaries, deterministic lifecycle checks and coverage.
-- [Operations](docs/operations.md): configuration, probes, logs, shutdown and container sizing.
-- [Verification](docs/verification.md): assignment acceptance map and actual evidence.
-- [Feature history](specs/README.md): completed Lean cycles and their Git sequence.
-- [AGENTS.md](AGENTS.md) / [SKILLS.md](SKILLS.md): focused guidance and official Lean skills.
+## Development and testing
+
+| Task                            | Linux/Unix and macOS       | Windows PowerShell             |
+| ------------------------------- | -------------------------- | ------------------------------ |
+| Run with automatic restart      | `npm run dev`              | `npm.cmd run dev`              |
+| Unit tests                      | `npm run test:unit`        | `npm.cmd run test:unit`        |
+| Build and run integration tests | `npm run test:integration` | `npm.cmd run test:integration` |
+| Full verification               | `npm run verify`           | `npm.cmd run verify`           |
+| Format                          | `npm run format`           | `npm.cmd run format`           |
+
+Development mode runs TypeScript source directly; `npm start` runs the compiled
+`dist/server.js`. Run verification to check types and build the application.
+The [testing guide](docs/testing.md) explains fixtures, helpers and coverage.
+
+Optional container and resource checks:
+
+| Check                 | Linux/Unix and macOS               | Windows PowerShell                     |
+| --------------------- | ---------------------------------- | -------------------------------------- |
+| Container smoke test  | `npm run test:container`           | `npm.cmd run test:container`           |
+| Native process memory | `npm run test:resources`           | `npm.cmd run test:resources`           |
+| Container memory      | `npm run test:resources:container` | `npm.cmd run test:resources:container` |
+
+Container checks require a running Docker engine using Linux containers. The
+smoke test builds the image, checks runtime restrictions, health, sample counting
+and shutdown, then removes its resources. Resource checks stream over 512 MiB and
+report server memory separately from client memory; the container check enforces
+a 256 MiB memory limit. See [container setup](docs/development.md#run-the-linux-container)
+and [resource test details](docs/testing.md#large-input-resource-checks).
+
+## Code map
+
+| Location                       | Responsibility                                                    |
+| ------------------------------ | ----------------------------------------------------------------- |
+| [src/server.ts](src/server.ts) | Process startup and shutdown                                      |
+| [src/app.ts](src/app.ts)       | Fastify app construction and health endpoints                     |
+| [src/upload/](src/upload/)     | Multipart validation, capacity, cancellation and error responses  |
+| [src/mp3/](src/mp3/)           | Transport-independent streaming frame counter                     |
+| [tests/](tests/)               | Unit tests, real HTTP/process tests and audio fixtures            |
+| [scripts/](scripts/)           | Build cleanup, fixture verification and container/resource checks |
+
+For more detail, read the [architecture](docs/architecture.md),
+[MP3 format guide](docs/mp3.md), [fixture guide](tests/fixtures/README.md) and
+[operations guide](docs/operations.md).
