@@ -1,59 +1,79 @@
 import { InvalidMp3Error } from "./error.ts";
 import { InferenceBudget, inferFreeLength } from "./free-format.ts";
-import { type FrameHeader, readHeader } from "./header.ts";
+import { FRAME_HEADER_BYTES, type FrameHeader, readHeader } from "./header.ts";
 import { StreamReader } from "./reader.ts";
-import { readTag } from "./tags.ts";
+import { consumeMetadata } from "./tags.ts";
 
-/** Consume a byte stream with bounded retained state; a successful count requires valid EOF. */
+type ParsingPhase = "leading-metadata" | "audio" | "trailing-metadata";
+
+/**
+ * Count physical MPEG-1 Layer III frames from an asynchronous byte stream.
+ * Audio payloads and metadata contents are skipped rather than decoded. A successful
+ * count requires at least one complete frame and valid input through EOF.
+ *
+ * Consume the source once and close its iterator on success or failure.
+ * Invalid/unsupported media throws InvalidMp3Error; source errors and cancellation
+ * propagate. Cancellation is cooperative: source owners must interrupt blocked reads.
+ */
 export async function countFrames(
   source: AsyncIterable<Uint8Array>,
   signal?: AbortSignal,
 ): Promise<number> {
   signal?.throwIfAborted();
   const input = new StreamReader(source, signal);
-  let count = 0;
-  let terminal = false;
-  let pendingHeader: FrameHeader | undefined;
-  let freeLength: { bytes: number; sampleRateHz: number } | undefined;
-  const budget = new InferenceBudget();
+  let frameCount = 0;
+  // Leading metadata may be followed by audio. Once trailing metadata starts,
+  // all remaining bytes must be metadata; audio cannot resume.
+  let phase: ParsingPhase = "leading-metadata";
+  let alreadyReadHeader: FrameHeader | undefined;
+  let freeFrameSize: { unpaddedBytes: number; sampleRateHz: number } | undefined;
+  const inferenceBudget = new InferenceBudget();
   try {
     while (true) {
-      let header = pendingHeader;
-      pendingHeader = undefined;
+      let header = alreadyReadHeader;
+      alreadyReadHeader = undefined;
       if (!header) {
-        let bytes = await input.read(4);
+        let bytes = await input.read(FRAME_HEADER_BYTES);
         if (bytes.length === 0) break;
         header = readHeader(bytes);
-        if (!header || terminal) {
-          // After a terminal envelope, header-shaped bytes may be an undeclared APE body,
-          // but they can never resume audio counting. The bounded suffix validator decides.
+        if (!header || phase === "trailing-metadata") {
+          // Footer-only metadata can contain header-shaped bytes. After audio
+          // ends, those bytes must pass metadata validation instead of restarting audio.
           bytes = Buffer.from(bytes); // Metadata may outlive the producer chunk that held its prefix.
-          if ((await readTag(input, bytes, count > 0)) === "eof") break;
-          if (count > 0) terminal = true;
+          const afterAudio = phase !== "leading-metadata";
+          if ((await consumeMetadata(input, bytes, afterAudio)) === "end-of-stream") break;
+          if (afterAudio) phase = "trailing-metadata";
           continue;
         }
       }
-      let length: number;
+      let frameBytes: number;
       if (header.kind === "indexed") {
-        freeLength = undefined;
-        length = header.frameBytes;
-      } else if (freeLength?.sampleRateHz === header.sampleRateHz) {
-        length = freeLength.bytes + header.padding;
+        freeFrameSize = undefined;
+        frameBytes = header.frameBytes;
+      } else if (freeFrameSize?.sampleRateHz === header.sampleRateHz) {
+        frameBytes = freeFrameSize.unpaddedBytes + header.padding;
       } else {
-        const inferred = await inferFreeLength(input, header, budget);
-        freeLength = { bytes: inferred.bytes, sampleRateHz: header.sampleRateHz };
-        pendingHeader = inferred.next;
-        count++;
+        const inferred = await inferFreeLength(input, header, inferenceBudget);
+        freeFrameSize = {
+          unpaddedBytes: inferred.unpaddedBytes,
+          sampleRateHz: header.sampleRateHz,
+        };
+        // Inference already consumed this entire frame and the next header.
+        // Count the completed frame now, then reuse that header on the next loop.
+        alreadyReadHeader = inferred.nextHeader;
+        frameCount++;
+        phase = "audio";
         continue;
       }
-      if (length < header.minimumBytes)
+      if (frameBytes < header.minimumBytes)
         throw new InvalidMp3Error("Frame length is below its overhead.");
-      await input.skip(length - 4);
-      count++;
+      await input.skip(frameBytes - FRAME_HEADER_BYTES);
+      frameCount++;
+      phase = "audio";
     }
     signal?.throwIfAborted();
-    if (count === 0) throw new InvalidMp3Error("No MPEG audio frames were found.");
-    return count;
+    if (frameCount === 0) throw new InvalidMp3Error("No MPEG audio frames were found.");
+    return frameCount;
   } finally {
     await input.close();
   }

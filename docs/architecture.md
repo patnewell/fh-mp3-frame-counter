@@ -42,6 +42,14 @@ Read app, upload route, then count to follow a request. Biome enforces parser
 independence; harness tests exercise the actual permitted/forbidden imports.
 There is no DI container or generic streaming framework.
 
+For a first tour of the parser, read the [MP3 guide](mp3.md), then `count.ts`
+and `header.ts`. The counter has three phases: leading metadata, audio and
+trailing metadata. Audio may follow leading metadata, but cannot resume after
+trailing metadata begins. The free-format helper returns an already-read next
+header; the counter reuses it rather than consuming those bytes twice.
+`tags.ts` owns metadata traversal and validation, and `reader.ts` explains the
+shared stream position, buffer ownership and cooperative scheduling contracts.
+
 ## Incremental counting and retained state
 
 For CBR and ordinary VBR, each header supplies its own frame length. The parser

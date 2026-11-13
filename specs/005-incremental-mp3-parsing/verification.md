@@ -324,3 +324,186 @@ the lazy upload above the former 100 MiB cap. `git diff --check` passed.
 Resource/container/other-platform checks were not rerun for this configuration
 correction; the prior Docker-unavailable qualification remains. Tests were run
 on the uncommitted correction; no push was performed.
+
+## Free-format readability (2026-11-13)
+
+Tested base `bb7b9e3271012af0b3519a8333625aee42d5cb7d` plus this working-tree
+refactor, on native Windows x64 / Node 24.22.3. Free-format behavior and S05/S06/S09
+remain unchanged. `inferFreeLength` now names header start/end positions, padded
+distance and unpadded size. Its result uses `unpaddedBytes` / `nextHeader`, with
+the existing counter updated to show the padding calculation and header reuse.
+`isCompatibleFreeHeader` separates format compatibility from scanning;
+`HeaderWindow` owns the fixed rolling four-byte state and its optimized bit
+operations. Budget names now identify inference runs and candidate positions.
+
+Comments and the MP3 guide explain bitrate index zero, CRC/channel overhead,
+padding with a worked 501-minus-1 example, first-boundary commitment, whole-stream
+budgets and the already-consumed next header. No new framing rule, dependency,
+transport policy or application entrypoint was introduced.
+
+The original 23 free-format cases passed before refactoring. A simpler copying
+window also passed, but a diagnostic focused run took 1155 ms against 296 ms for
+the original cases, so the final helper retains the bit operations. The final
+focused run passed those same 23 cases in 395 ms. These single-run observations
+guided the implementation choice; they are not a controlled benchmark or a
+production throughput claim. Synchronous bounded chunk scans, reader checkpoints,
+fixed retained state and all existing limits remain.
+
+Added three format-level cases split the next header after byte one, two and
+three following a padded 501-byte first frame; each must count exactly three
+frames. Existing expected answers and fixture bytes/hashes remain unchanged.
+The full gate passed the real free-format fixture, exact inference distance and
+search/run budgets, false-boundary commitment, padding/overhead, rate/indexed
+transitions, truncation, cancellation, all other fixtures and HTTP/process checks.
+
+Self-review using `review-change` inspected the complete diff and caller, window
+carry across chunks, position arithmetic, exact-limit ordering, budgets and
+stream/cancellation ownership. No findings remain. The three split cases add
+coverage without changing existing oracles, thresholds or exclusions.
+`npm.cmd run verify` passed lint, strict typecheck, clean build and coverage:
+**339 passed, zero failed, three expected native Windows POSIX-signal skips**
+across 20 files. Coverage: **95.61% statements**, **93.29% branches**,
+**97.67% functions**, **97.51% lines**. `git diff --check` passed.
+Resource/container/other-platform checks were not rerun for this refactor;
+their earlier qualifications remain. Tests were run on the uncommitted correction;
+no push was performed.
+
+A subsequent comments-only second pass reviewed all of `free-format.ts` against
+the implementation, counter and reader. It explains why streaming's small retained
+state still needs CPU/search limits, the distinct distance/restart/combined-work
+budgets, whole-stream accounting, and their distinction from MPEG requirements,
+upload-size limits and buffer sizes. It also explains CRC/side information,
+padding, consumed-header ownership, chunk boundaries, cancellation/yielding,
+first-boundary commitment and the rolling window's sync/unsigned operations.
+No findings remain. Executable code and limit values were unchanged in this pass;
+Biome and `git diff --check` passed. Runtime tests were not rerun for these comment
+edits; the 339-pass result above is the preceding refactor's execution evidence.
+
+## Directory readability assessment (2026-11-13)
+
+Reviewed all six files in `src/mp3/` on base
+`bb7b9e3271012af0b3519a8333625aee42d5cb7d` plus the existing, uncommitted
+free-format readability changes. Three parallel read-only reviews covered
+metadata, orchestration/header/error, and stream/free-format responsibilities.
+The assessment used `review-change`, the selected requirements, current guides,
+callers and parser tests. No parser source or test expectations were changed
+during this assessment. Findings below concern maintainability; no functional
+defect was established.
+
+Open findings, in recommended order:
+
+1. **Medium — metadata contracts and backward search** (`tags.ts:22`, `:104`,
+   `:134`). Explain already-consumed prefix bytes, before/after-audio policy,
+   return outcomes, footer-only suffix buffering and the search back to offset
+   zero. Rename ambiguous offset/stack helpers and explain remembered malformed
+   candidates. This is the least approachable module for a format newcomer.
+2. **Medium — implicit parser phases and consumption** (`count.ts:15`, `:31`,
+   `:43`). Make leading metadata/audio/trailing metadata transitions apparent;
+   clarify that the saved next header is already consumed and that inference
+   already completed the frame counted in its branch. Prefer clearer names and
+   small local explanations before introducing a new state abstraction.
+3. **Medium — MPEG field decoding** (`header.ts:20`, `:33`, `:41`). Name decoded
+   fields and explain accepted/reserved bit values, CRC and mono/stereo overhead,
+   the bitrate-zero marker and the length formula. Document returned byte units
+   and `undefined`; retain the useful discriminated union.
+4. **Medium — reader API/ownership contracts** (`reader.ts:27`, `:52`, `:64`,
+   `:89`, `:108`). Explain peek versus consume, consumed versus fetched position,
+   partial reads at EOF, borrowed versus copied results, exact skip and iterator
+   closure. Explain/name descriptor, progress and empty-pull bounds; retain bulk
+   processing and cooperative cancellation without adding per-byte promises.
+5. **Medium — metadata size semantics and policy limits** (`tags.ts:4`, `:47`,
+   `:145`, `:176`, `:202`). Explain bounded unknown-tail memory versus streamed
+   declared tags, ambiguity-work limits and yielding after EOF. Distinguish ID3
+   payload length from APE size including its footer; use verb-led decoder names
+   and name the remaining ID3 sizes/flags rather than opaque literal arithmetic.
+6. **Low — free-format naming consistency** (`free-format.ts:16`, `:25`, `:106`).
+   Names should identify unpadded frame bytes, searched positions and a candidate
+   header before acceptance. The educational comments now explain the algorithm,
+   ownership and safety policy well; further expansion is not the priority.
+
+The six-file separation is appropriate: traversal, header decoding, stream
+cursor, free-format inference, metadata and shared domain error each have a clear
+owner. Keep `HeaderWindow` local and retain the tiny shared error module. Improve
+metadata's internal structure/contracts first. If format rules later grow enough
+to justify splitting, pure ID3 and APE descriptor modules can serve both forward
+and backward paths; avoid circular suffix/tag imports, generic utility modules,
+per-function files or a parser framework. File count alone is not the problem.
+
+TypeScript foundations are sound: strict compilation, a real header discriminant,
+readonly fields, private mutable state, typed asynchronous input and narrowed
+unknown exceptions. No unsafe `any`, non-null assertions or broad casts need
+removal. Prefer semantic names, small literal unions where useful and explicit
+contracts over more generic layers or branded numeric types.
+
+Findings remain open because this request was an assessment. `npm.cmd run verify`
+was rerun on the reviewed working tree and passed lint, strict typecheck, clean
+build and coverage: **339 passed, zero failed, three expected native Windows
+POSIX-signal skips**, across 20 files. Coverage remained **95.61% statements**,
+**93.29% branches**, **97.67% functions**, **97.51% lines**. This verifies existing
+behavior, not newcomer comprehension. Resource/container/other-platform checks
+were not rerun; their prior qualifications remain. No commit or push was made
+as part of this assessment.
+
+## Directory readability implementation (2026-11-13)
+
+Tested base `bb7b9e3271012af0b3519a8333625aee42d5cb7d` plus the existing pending
+free-format changes and this working-tree correction, on native Windows x64 /
+Node 24.22.3. The six findings from the directory assessment are resolved within
+the existing six modules; `error.ts` remains unchanged. No format policy, numeric
+limit, error response, fixture expectation, dependency or test gate was changed.
+
+Disposition of the assessment findings:
+
+1. `tags.ts` now exposes `consumeMetadata` with `continue` / `end-of-stream`
+   outcomes. Its contract describes the already-consumed prefix, leading/trailing
+   policy and the caller's obligation to remain in metadata after audio.
+   Backward validation names its pending end offsets, candidate starts and saved
+   malformed interpretation, and explains exclusive offsets and complete coverage.
+2. `count.ts` names three phases with a small literal union. The phase enters
+   audio only after a completed frame; trailing metadata is sticky. Names and
+   branch comments explain already-read headers, inferred frame consumption and
+   frame byte counts. The public API documents format, ownership and errors.
+3. `header.ts` names the decoded MPEG fields, explains accepted/reserved values,
+   padding/CRC/channel overhead and the formula, and documents undefined results.
+   A shared four-byte width avoids repeated format literals; `FrameHeader` keeps
+   its existing discriminated shape. A local copy of that width in the per-byte
+   window avoids repeated module-property access in transformed test execution.
+4. `reader.ts` names chunk offset, consumed stream position and bytes since yield.
+   Its contracts explain sequential access, peek/consume, borrowed/copy results,
+   short EOF reads, exact skips, cancellation checkpoints and iterator release.
+   Descriptor and empty-pull bounds now have names and reasons, with no new checks.
+5. Metadata safety comments distinguish unknown-tail memory from ambiguity CPU
+   work, and explain yielding after EOF. Named ID3 descriptors/flags and a typed
+   version table replace literal arithmetic and the nested flag-mask expression.
+   ID3 payload size and APE size including footer are explicit; decoded APE
+   `hasHeader` remains a declaration that must be validated against the pair.
+6. Free-format names identify maximum unpadded frame bytes, searched positions and
+   a candidate header before acceptance. Existing explanatory comments remain.
+
+Three parallel implementation tasks had disjoint source ownership. Subsequent
+cross-reviews with `review-change` checked counting transitions, first-boundary
+commitment, exact limits, header masks, ID3 masks, APE/ID3 sizes, candidate order,
+error propagation, copies and stream/cancellation ownership. Two minor wording
+findings were resolved: binary channel-mode values are explicit and API comments
+distinguish metadata contents from the descriptors that are decoded/validated.
+No review findings remain. Guides explain the module tour, phases, metadata
+outcomes and backward validation. Earlier assessment/evidence entries remain
+historical rather than being rewritten to claim prior resolution.
+
+Strict typecheck and focused parser/fixture execution passed **149 tests across
+seven files**. `npm.cmd run verify` then passed lint, strict typecheck, clean
+compilation and coverage: **339 passed, zero failed, three expected native Windows
+POSIX-signal skips**, across 20 files. Coverage was **95.77% statements**,
+**93.19% branches**, **97.67% functions**, **97.27% lines**. Fixtures, assertions,
+thresholds and exclusions were preserved. Final wording-only edits were checked
+with Biome and `git diff --check` after the full gate.
+
+`npm.cmd run test:resources` passed using the existing `dist/server.js`:
+**536,871,536 lazy file bytes** returned exactly **1,284,528 frames**, with
+liveness healthy. Actual execution: **2026-11-13 01:58:33.983–01:58:35.815 UTC**.
+The report records `workingTreeDirty: true`, server baseline RSS 79,908,864 bytes,
+server OS peak RSS **92,688,384 bytes (about 88.4 MiB)**, 57 observations and the
+unchanged 256 MiB ceiling. Separate client peak RSS was 75,141,120 bytes. This is
+resource-regression evidence for that input, not a production benchmark.
+Docker and other-platform checks were not rerun; previous qualifications remain.
+The correction remains uncommitted at the time of verification; no push was made.

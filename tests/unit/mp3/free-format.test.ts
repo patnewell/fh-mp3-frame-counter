@@ -69,6 +69,12 @@ describe("free-format compatibility", () => {
     expect(await countFrames(chunkBytes(bytes, [65_571, 2, 17]))).toBe(3);
   });
 
+  it.each([1, 2, 3])("finds the next header split after byte %i", async (split) => {
+    // The padded first frame occupies 501 bytes; split the next four-byte header.
+    const bytes = Buffer.concat([free(500, 1), free(), free()]);
+    expect(await countFrames(chunkBytes(bytes, [501 + split, 4 - split, 1024]))).toBe(3);
+  });
+
   it.each([
     ["one unresolved frame", free()],
     ["truncated final frame", Buffer.concat([free(), free(), free().subarray(0, 499)])],

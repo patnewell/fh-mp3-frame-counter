@@ -150,3 +150,29 @@ numeric bounds (upstream ajv-validator/ajv#2626). A shared JSON Schema `allOf`
 integer check rejects non-finite coercion results without handwritten validation
 or a dependency patch. Preserve the existing infinity-port rejection and cover
 both timers and admission as well.
+
+## Free-format readability refinement (2026-11-13)
+
+Keep S05/S06/S09 behavior while separating the rolling header window from MPEG
+compatibility checks. Name header positions, padded distance and unpadded length
+explicitly, and return `unpaddedBytes` / `nextHeader` to make the counter's reuse
+clear. Explain bitrate index zero, padding, mandatory overhead, first-boundary
+commitment and reader ownership alongside the algorithm and in the MP3 guide.
+Retain synchronous chunk scanning rather than adding per-byte asynchronous work.
+Use existing compatibility/budget/fixture tests and all three header split points
+to verify the refactor, then review the diff and run the complete gate.
+
+## Directory readability refinement (2026-11-13)
+
+Resolve the assessment's six findings within the existing six modules. Keep
+metadata traversal and format validation together; clarify prefix ownership,
+outcomes, size semantics, backward offset search and safety budgets. Use named
+ID3 descriptors and a version/flags table, preserving validation order and errors.
+Make counting phases explicit with a small literal union; explain inference's
+already-consumed next header and count only complete frames. Name MPEG bit fields
+and explain their units/formula; share the four-byte header width. Document and
+name the reader's coordinate systems, borrowing/EOF contracts and work limits.
+Align free-format candidate/limit names with the clarified concepts; leave the
+shared error module unchanged. Preserve fixtures, accepted/rejected layouts,
+limits, buffering, yielding and cancellation. Use existing parser/fixture checks,
+independent diff review and the full gate; record actual results and dispositions.

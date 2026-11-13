@@ -41,6 +41,26 @@ minimum overhead. Commit that local length; each subsequent free frame adds its
 own padding. An indexed frame or sample-rate change starts a new inference.
 A lone unresolved free frame is invalid.
 
+For example, suppose header A has padding set and header B begins 501 bytes
+after A. The common **unpadded** length is `501 - 1 = 500` bytes. A occupies
+501 bytes; B occupies `500 + B.padding` bytes. The distance includes A's header
+and all of its payload, but excludes B's header.
+
+The implementation follows that calculation in `src/mp3/free-format.ts`:
+
+1. Remember where A started. Its four-byte header has already been consumed.
+2. Skip A's mandatory framing overhead: any CRC and channel side information.
+3. Slide a four-byte window through the remaining bytes until it contains a
+   supported free-format header at the same sample rate. A window can span chunks.
+4. Subtract A's padding from the distance to that candidate. Check that this
+   length also leaves room for B's own framing overhead and padding.
+5. Return the unpadded length and B's decoded header. The counter now knows A is
+   complete; it reuses B's header instead of reading it again.
+
+`HeaderWindow` contains the byte-scanning mechanics; `isCompatibleFreeHeader`
+contains the MPEG compatibility checks. `InferenceBudget` counts searches and
+examined positions across the whole stream, including later free-format runs.
+
 The concrete bounds are:
 
 - Maximum unpadded inferred length: **128 KiB**.
@@ -87,6 +107,26 @@ then validate complete chains backward at EOF with **4096 alternative selections
 at most. Reject a larger unknown suffix immediately. This allowance also bounds
 ambiguous footer-only combinations; it does not restrict declared forward bodies.
 Recognized forward envelopes take precedence over descriptors inside their payload.
+
+`consumeMetadata` receives a prefix already read by the counter. It returns
+`continue` after consuming a recognised tag, or `end-of-stream` after validating
+the complete unknown suffix. For the latter case, validation starts at the end
+of the buffered suffix and works backward through possible complete tags.
+Reaching offset zero proves that every buffered byte belongs to metadata. A
+failed interpretation allows another saved boundary to be tried; leftover junk
+rejects the suffix if none of those interpretations accounts for it.
+
+The two metadata budgets protect different resources. The 64 KiB allowance caps
+retained memory when the length arrives only in a footer. The 4096-alternative
+allowance caps work caused by overlapping possible tag boundaries. Large tags
+with a leading length do not need that buffer, and ordinary forward tag chains
+do not consume the ambiguity allowance. Backward validation still yields and
+checks cancellation after source EOF, because searching buffered bytes uses CPU.
+
+Size fields also differ by format: ID3's declared payload size excludes both
+header and footer, whereas APE's declared size includes its footer but excludes
+a separate header. The descriptor helpers name those values explicitly so the
+forward skip and backward boundary calculations use the same convention.
 
 APE checks cover versions, size, reserved bytes, allowed flags and required pairs.
 APEv1 is footer-only and requires zero flags; v2-only header flags cannot create

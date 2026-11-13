@@ -1,17 +1,36 @@
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { InvalidMp3Error } from "./error.ts";
 
+// Limit byte progress between yields so a large input chunk cannot keep the
+// event loop busy indefinitely without observing cancellation or other work.
 export const PROGRESS_BYTES = 64 * 1024;
+
+// read() assembles only small headers/footers. The largest supported descriptor
+// is APE's 32-byte header/footer; frame and metadata payloads use skip() instead.
+const MAX_DESCRIPTOR_BYTES = 32;
+
+// Empty chunks make no byte progress. Yield during long sequences of them so
+// they cannot bypass the normal progress-based cancellation/yield checkpoints.
+const EMPTY_PULLS_PER_YIELD = 1024;
 const EMPTY = Buffer.alloc(0);
 
-/** Own one iterator and borrow at most its current chunk; retained descriptors own their bytes. */
+/**
+ * A forward-only cursor for one consumer reading an asynchronous byte stream.
+ * Use its methods sequentially: they share one position and one current chunk.
+ * Input is pulled on demand, and consumed chunks are released rather than saved.
+ *
+ * view() exposes bytes without consuming them; advance() consumes those bytes.
+ * read() and skip() perform both steps. Returned buffers can borrow source memory,
+ * so copy any bytes that must survive another reader operation. close() releases
+ * the owned iterator when parsing finishes or fails.
+ */
 export class StreamReader {
   readonly #iterator: AsyncIterator<Uint8Array>;
   readonly #signal: AbortSignal | undefined;
   #chunk: Buffer = EMPTY;
-  #offset = 0;
-  #position = 0;
-  #progress = 0;
+  #chunkOffset = 0;
+  #streamPosition = 0;
+  #bytesSinceYield = 0;
   #done = false;
   #closed = false;
 
@@ -20,18 +39,23 @@ export class StreamReader {
     this.#signal = signal;
   }
 
+  /** Bytes consumed from the source's start; fetching a chunk does not move this position. */
   get position(): number {
-    return this.#position;
+    return this.#streamPosition;
   }
 
-  /** The returned view is borrowed until the next reader operation; callers copy saved fields. */
+  /**
+   * Peek at the next bounded block without consuming it. An empty buffer means
+   * EOF; empty producer chunks are ignored. The view borrows the current source
+   * chunk and must be copied if retained across another reader operation.
+   */
   async view(): Promise<Buffer> {
     this.#signal?.throwIfAborted();
-    if (this.#progress >= PROGRESS_BYTES) await this.checkpoint();
+    if (this.#bytesSinceYield >= PROGRESS_BYTES) await this.checkpoint();
     let emptyPulls = 0;
-    while (this.#offset === this.#chunk.length && !this.#done) {
+    while (this.#chunkOffset === this.#chunk.length && !this.#done) {
       this.#chunk = EMPTY;
-      this.#offset = 0;
+      this.#chunkOffset = 0;
       this.#signal?.throwIfAborted();
       const next = await this.#iterator.next();
       this.#signal?.throwIfAborted();
@@ -39,30 +63,41 @@ export class StreamReader {
         this.#done = true;
       } else {
         this.#chunk = Buffer.from(next.value.buffer, next.value.byteOffset, next.value.byteLength);
-        // An endless series of empty chunks must not starve a request deadline either.
-        if (this.#chunk.length === 0 && ++emptyPulls % 1024 === 0) await this.checkpoint();
+        if (this.#chunk.length === 0 && ++emptyPulls % EMPTY_PULLS_PER_YIELD === 0) {
+          await this.checkpoint();
+        }
       }
     }
     return this.#chunk.subarray(
-      this.#offset,
-      Math.min(this.#chunk.length, this.#offset + PROGRESS_BYTES - this.#progress),
+      this.#chunkOffset,
+      Math.min(this.#chunk.length, this.#chunkOffset + PROGRESS_BYTES - this.#bytesSinceYield),
     );
   }
 
-  /** Consume only bytes from the last bounded view; payload skipping needs no per-byte promises. */
+  /**
+   * Consume bytes exposed by the most recent view. The caller must stay within
+   * that view. This synchronous step lets payloads be consumed in blocks without
+   * creating a promise for each byte.
+   */
   advance(bytes: number): void {
-    this.#offset += bytes;
-    this.#position += bytes;
-    this.#progress += bytes;
-    if (this.#offset === this.#chunk.length) {
+    this.#chunkOffset += bytes;
+    this.#streamPosition += bytes;
+    this.#bytesSinceYield += bytes;
+    if (this.#chunkOffset === this.#chunk.length) {
       this.#chunk = EMPTY;
-      this.#offset = 0;
+      this.#chunkOffset = 0;
     }
   }
 
-  /** Small descriptors can borrow a contiguous view; only a split descriptor needs a copy. */
+  /**
+   * Read and consume length bytes (0–32), joining split headers/footers as needed.
+   * EOF may return fewer bytes than requested; callers validate descriptor length.
+   * A contiguous result borrows source memory, while a split result owns a copy.
+   * Copy a result kept across reader operations rather than depending on which
+   * path was taken. A zero-length read returns without pulling input.
+   */
   async read(length: number): Promise<Buffer> {
-    if (!Number.isInteger(length) || length < 0 || length > 32) {
+    if (!Number.isInteger(length) || length < 0 || length > MAX_DESCRIPTOR_BYTES) {
       throw new RangeError("A stream descriptor must fit 32 bytes.");
     }
     if (length === 0) return EMPTY;
@@ -80,12 +115,18 @@ export class StreamReader {
       this.advance(bytes);
       copied += bytes;
       if (copied === length) break;
-      view = EMPTY; // A tiny carried fragment must not pin a consumed producer buffer during a pull.
+      // descriptor now owns the carried bytes. Release the borrowed view before
+      // pulling again so a small fragment cannot retain a large producer buffer.
+      view = EMPTY;
       view = await this.view();
     }
     return descriptor.subarray(0, copied);
   }
 
+  /**
+   * Consume exactly length bytes without retaining their contents. Unlike read(),
+   * this throws InvalidMp3Error if the source ends before the full extent arrives.
+   */
   async skip(length: number, context = "MPEG frame"): Promise<void> {
     let remaining = length;
     while (remaining > 0) {
@@ -97,14 +138,22 @@ export class StreamReader {
     }
   }
 
-  /** Also used by bounded metadata searches whose CPU work can revisit buffered bytes. */
+  /**
+   * Let other event-loop tasks run, check cancellation, then reset byte progress.
+   * Buffered metadata searches also call this because their work can continue
+   * after source EOF, without consuming new bytes to trigger view() checkpoints.
+   */
   async checkpoint(): Promise<void> {
     this.#signal?.throwIfAborted();
     await nextTurn();
     this.#signal?.throwIfAborted();
-    this.#progress = 0;
+    this.#bytesSinceYield = 0;
   }
 
+  /**
+   * Release the current chunk and await the iterator's return(), if provided.
+   * Repeated calls do not return the iterator again; return failures propagate.
+   */
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;

@@ -23,3 +23,11 @@
 ## Configuration simplification
 
 - [x] [T06] Establish failing standard-coercion regressions, replace custom configuration validation with pinned `env-schema` and shared declarative constraints, preserve defaults/isolation/startup privacy, update affected tests and current docs, review the complete correction and record the full gate's actual results.
+
+## Free-format readability
+
+- [x] [T07] Separate byte-window mechanics from MPEG compatibility, explain and name padded/unpadded lengths and consumed-header ownership, add a worked MP3-guide example and header-split coverage, preserve all framing/search/stream bounds, review the full correction and record actual verification.
+
+## Directory readability
+
+- [x] [T08] Resolve the directory assessment's six clarity findings in the existing modules: explain metadata traversal/limits/lengths, make counting phases and header ownership explicit, name MPEG fields and reader coordinates/contracts, align free-format names, preserve behavior and fixtures, update the guide, review the complete diff and record the focused/full/resource checks actually run.
