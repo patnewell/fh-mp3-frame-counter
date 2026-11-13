@@ -21,7 +21,7 @@ describe("free-format compatibility", () => {
   it("rejects a later contradiction after committing a tempting payload boundary", async () => {
     const first = free();
     for (const offset of [100, 200]) Buffer.from("fffb0000", "hex").copy(first, offset);
-    // 005 deliberately replaces the old successful full-suffix retry with a local commitment.
+    // The 100-byte decoy wins; a later contradiction must reject rather than retry at byte 500.
     await expect(count(Buffer.concat([first, free(), free()]))).rejects.toThrow(InvalidMp3Error);
   });
 
@@ -90,10 +90,19 @@ describe("free-format compatibility", () => {
     await expect(count(bytes)).rejects.toThrow(InvalidMp3Error);
   });
 
-  it("rejects the formerly seekable 1.1 MiB free-frame layout at the inference bound", async () => {
-    // 002 reached metadata ambiguity on this size; 005 rejects before retaining/reading that extent.
+  it("rejects a distant free-format boundary without consuming the complete input", async () => {
     const bytes = Buffer.concat([free(1_100_000), free(1_100_000)]);
-    await expect(count(bytes)).rejects.toThrow(/distance|length|limit|bound/);
+    const chunkSize = 4096;
+    let deliveredBytes = 0;
+    async function* source() {
+      for await (const chunk of chunkBytes(bytes, [chunkSize])) {
+        deliveredBytes += chunk.length;
+        yield chunk;
+      }
+    }
+    await expect(countFrames(source())).rejects.toThrow(InvalidMp3Error);
+    // Allow the final producer chunk that straddles the documented search limit.
+    expect(deliveredBytes).toBeLessThanOrEqual(128 * 1024 + chunkSize);
   });
 
   it("accepts 4096 inferred runs and rejects the next candidate", async () => {
@@ -104,7 +113,7 @@ describe("free-format compatibility", () => {
     ]);
     const bytes = Buffer.concat(Array.from({ length: 4097 }, () => run));
     expect(await count(bytes.subarray(0, bytes.length - run.length))).toBe(12_288);
-    await expect(count(bytes)).rejects.toThrow(/candidate|inference|run/);
+    await expect(count(bytes)).rejects.toThrow(InvalidMp3Error);
   });
 
   it("propagates cancellation instead of trying another interpretation", async () => {
@@ -134,6 +143,6 @@ describe("free-format compatibility", () => {
       for (let index = 0; index < runs; index++) yield run;
     }
     expect(await countFrames(repeated(128))).toBe(384);
-    await expect(countFrames(repeated(129))).rejects.toThrow(/search|work|budget/);
+    await expect(countFrames(repeated(129))).rejects.toThrow(InvalidMp3Error);
   });
 });

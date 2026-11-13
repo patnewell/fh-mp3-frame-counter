@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { createApp } from "../../../src/app.ts";
 import { InvalidMp3Error } from "../../../src/mp3/error.ts";
 import { describeUploadError, UploadError } from "../../../src/upload/error.ts";
 
@@ -40,26 +39,13 @@ describe("public upload failures", () => {
   it("distinguishes media rejection from unexpected errors", () => {
     expect(describeUploadError(new InvalidMp3Error("private byte detail")).status).toBe(400);
     expect(describeUploadError({ code: "FST_INVALID_MULTIPART_CONTENT_TYPE" }).status).toBe(415);
-    for (const error of [
-      undefined,
-      null,
-      "private",
-      new Error("/private/path"),
-      { code: "ENOSPC" },
-    ]) {
+  });
+  it.each([undefined, null, "private", new Error("/private/path"), { code: "ENOSPC" }])(
+    "hides unexpected failure details (case %#)",
+    (error) =>
       expect(describeUploadError(error)).toEqual({
         status: 500,
         message: "The upload could not be processed.",
-      });
-    }
-  });
-});
-
-describe("application options", () => {
-  it.each([0, -1, 1.5, Number.NaN, 2_147_483_648])("rejects invalid timeout %s", (timeoutMs) => {
-    expect(() => createApp({ timeoutMs })).toThrow();
-  });
-  it.each([0, -1, 1.5, Number.NaN])("rejects invalid app capacity %s", (maxUploads) => {
-    expect(() => createApp({ maxUploads })).toThrow();
-  });
+      }),
+  );
 });

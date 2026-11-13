@@ -642,3 +642,62 @@ across 20 files. Coverage: **97.95% statements, 96.08% branches, 97.61% function
 99.23% lines**. Final edits after that gate only polished comments and added this
 record. Heavy resource checks, Docker checks and other-platform execution were
 not rerun for this behavior-preserving cleanup. No commit or push was made.
+
+## Test suite review (2026-11-13)
+
+Reviewed all 20 test modules, the shared helpers and fixture documentation in the
+working tree based on `c53432e67ee6b46df82c38b9a949b2da937ff3e9`, using pinned
+Node **24.22.3** and Vitest **5.1.0**. This is maintenance within the existing
+feature; no service contract, production source, fixture bytes/manifest, framework
+pin, coverage threshold, exclusion or platform skip changed. Updated
+`docs/testing.md` with helper responsibilities and testing conventions.
+
+Applied `review-change` to the complete diff, checking test intent against the
+parser, transport, runtime and ownership contracts. Findings and dispositions:
+
+- Consolidated four copies of promise-deadline handling into `helpers/async.ts`
+  and repeated raw HTTP response/multipart construction into `helpers/http.ts`.
+  Node's `stream/consumers.text` replaces hand-written response accumulation.
+  The single-observation timeout remains explicit because retrying a rejected
+  promise would change the evidence. App/process scopes still own cleanup.
+- Replaced the barrier wrapper with native `Promise.withResolvers`, state
+  assertion wrappers with `expect.poll`, log-event listener management with
+  `vi.waitUntil`, and the custom first-call failure counter with a Vitest mock.
+  Environment restoration uses `afterEach`; application-option tests now live
+  with configuration tests. Admission tests assert that permits exist before
+  using them instead of silently skipping calls through optional chaining.
+- Replaced the epilogue's fixed 50 ms sleep with parser progress, an event-loop
+  turn, retained-capacity assertions and HTTP completeness at response finish.
+  Real deadline fixtures now allow one second for setup/progress on busy workers;
+  they retain cancellation, response, recovery and unsettled-work assertions.
+- Privacy checks await both upload and unmatched-route completion records before
+  inspecting captured output. Child event waits classify missing events only
+  after stdio closes, and malformed complete JSON lines now fail rather than
+  being silently ignored. Synchronous Biome child invocations have a native
+  timeout because they block Vitest's own timeout callback.
+- Free-format bounds retain their independent boundary cases and assert the
+  domain error type rather than incidental wording. The distance case also
+  measures input delivery, allowing only the documented 128 KiB plus one chunk.
+  The metadata ambiguity reason assertion remains because generic malformed
+  rejection would not prove that its work budget was exercised.
+
+No unresolved findings remain. Retained the real HTTP/process fixtures, explicit
+ownership barriers, independent literal framing vectors and all six real-audio
+identities/counts. Five unexpected-error inputs previously checked in one loop
+now report as separate `it.each` cases, accounting for the increased test count.
+
+A temporary mutation returned the first file's count without multipart/HTTP
+completion. The revised epilogue test rejected it on prematurely released
+capacity. The mutation was restored before final verification; there is no
+production diff. Removing only the final HTTP-body await had not reproduced an
+early success because multipart iteration also waits for input completion.
+
+The final `npm.cmd run verify` passed lint, strict typecheck, clean build and
+coverage: **370 passed, zero failed, three expected native Windows POSIX-signal
+skips**, across 20 files. Coverage remains **97.95% statements, 96.08% branches,
+97.61% functions, 99.23% lines**. A separate shuffled run of multipart, upload
+lifecycle, compiled-process and configuration tests with seed **20261113** passed
+**95 tests**, with the same **three skips**, across four files. Final changes
+after the full gate only add this record. Heavy resource checks, Docker and
+other-platform execution were not rerun; the existing platform qualifications
+remain. No commit or push was made.

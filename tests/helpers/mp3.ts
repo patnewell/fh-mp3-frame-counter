@@ -1,5 +1,6 @@
 /** Structural test bytes, not an independently encoded audio fixture. */
 export function frame(header = "fffb9000", length = 417): Buffer {
+  // A nonsync payload keeps accidental frame headers out of unrelated test cases.
   const bytes = Buffer.alloc(length, 0x55);
   Buffer.from(header, "hex").copy(bytes);
   return bytes;
@@ -7,6 +8,7 @@ export function frame(header = "fffb9000", length = 417): Buffer {
 
 export function id3(payload: Buffer = Buffer.alloc(0), version = 4, footer = false): Buffer {
   const header = Buffer.from([0x49, 0x44, 0x33, version, 0, footer ? 0x10 : 0, 0, 0, 0, 0]);
+  // ID3 stores its payload length in four seven-bit (synchsafe) bytes.
   for (let index = 0; index < 4; index++) {
     header[9 - index] = (payload.length >>> (7 * index)) & 127;
   }
@@ -25,9 +27,11 @@ export function ape(payload: Buffer = Buffer.alloc(0), paired = false, version =
   const footer = Buffer.alloc(32);
   footer.write("APETAGEX");
   footer.writeUInt32LE(version, 8);
+  // APE's size includes the footer but excludes a separate header.
   footer.writeUInt32LE(payload.length + 32, 12);
   footer.writeUInt32LE(paired ? 0x8000_0000 : 0, 20);
   const header = paired ? Buffer.from(footer) : Buffer.alloc(0);
+  // Paired descriptors declare a header; only that header also sets the header-role bit.
   if (paired) header.writeUInt32LE(0xa000_0000, 20);
   return Buffer.concat([header, payload, footer]);
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { UploadAdmission } from "../../../src/upload/admission.ts";
 
 describe("app-owned upload admission", () => {
@@ -11,16 +11,16 @@ describe("app-owned upload admission", () => {
     const admission = new UploadAdmission(2);
     const first = admission.tryAcquire();
     const second = admission.tryAcquire();
-    expect(first).toBeDefined();
-    expect(second).toBeDefined();
+    assert.isDefined(first);
+    assert.isDefined(second);
     expect(admission.active).toBe(2);
     expect(admission.tryAcquire()).toBeUndefined();
-    first?.release();
+    first.release();
     const replacement = admission.tryAcquire();
-    expect(replacement).toBeDefined();
+    assert.isDefined(replacement);
     expect(admission.active).toBe(2);
-    replacement?.release();
-    second?.release();
+    replacement.release();
+    second.release();
     expect(admission.active).toBe(0);
   });
 
@@ -28,11 +28,13 @@ describe("app-owned upload admission", () => {
     const admission = new UploadAdmission(2);
     const first = admission.tryAcquire();
     const second = admission.tryAcquire();
-    first?.release();
-    first?.release();
+    assert.isDefined(first);
+    assert.isDefined(second);
+    first.release();
+    first.release();
     expect(admission.active).toBe(1);
-    second?.release();
-    second?.release();
+    second.release();
+    second.release();
     expect(admission.active).toBe(0);
   });
 
@@ -40,18 +42,21 @@ describe("app-owned upload admission", () => {
     const first = new UploadAdmission(1);
     const second = new UploadAdmission(1);
     const permit = first.tryAcquire();
+    assert.isDefined(permit);
     expect(first.tryAcquire()).toBeUndefined();
     const independent = second.tryAcquire();
-    expect(independent).toBeDefined();
-    permit?.release();
+    assert.isDefined(independent);
+    permit.release();
     expect(second.active).toBe(1);
-    independent?.release();
+    independent.release();
   });
 
   it("stops new work and waits for every active upload before releasing all drain waiters", async () => {
     const admission = new UploadAdmission(2);
     const first = admission.tryAcquire();
     const second = admission.tryAcquire();
+    assert.isDefined(first);
+    assert.isDefined(second);
     admission.stop();
     admission.stop();
     expect(admission.accepting).toBe(false);
@@ -60,10 +65,10 @@ describe("app-owned upload admission", () => {
     const drains = [admission.drained(), admission.drained()].map((drain) =>
       drain.then(() => completed++),
     );
-    first?.release();
+    first.release();
     await Promise.resolve();
     expect(completed).toBe(0);
-    second?.release();
+    second.release();
     await Promise.all(drains);
     expect(completed).toBe(2);
     expect(admission.tryAcquire()).toBeUndefined();

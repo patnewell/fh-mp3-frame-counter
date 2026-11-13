@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createApp } from "../../src/app.ts";
 import { readConfig, resolveAppSettings } from "../../src/config.ts";
 
 describe("runtime configuration", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it("uses documented defaults without consulting the process environment", () => {
     expect(readConfig({})).toEqual({
       host: "127.0.0.1",
@@ -52,12 +55,8 @@ describe("runtime configuration", () => {
     const appDefaults = resolveAppSettings();
     vi.stubEnv("PORT", "invalid-ambient-port");
     vi.stubEnv("maxUploads", "0");
-    try {
-      expect(readConfig({})).toEqual(runtimeDefaults);
-      expect(resolveAppSettings()).toEqual(appDefaults);
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    expect(readConfig({})).toEqual(runtimeDefaults);
+    expect(resolveAppSettings()).toEqual(appDefaults);
   });
 
   it("freezes resolved primitive settings so callers cannot change policy after construction", () => {
@@ -86,7 +85,7 @@ describe("runtime configuration", () => {
     ["SHUTDOWN_GRACE_MS", "0"],
     ["SHUTDOWN_GRACE_MS", "2147483648"],
     ["SHUTDOWN_GRACE_MS", "Infinity"],
-  ])("rejects out-of-range %s", (name, value) => {
+  ])("rejects out-of-range %s=%j", (name, value) => {
     expect(() => readConfig({ [name]: value })).toThrow();
   });
 
@@ -101,5 +100,14 @@ describe("runtime configuration", () => {
 
   it("rejects unsupported logging values", () => {
     expect(() => readConfig({ LOG_LEVEL: "private/secret" })).toThrow();
+  });
+});
+
+describe("application options", () => {
+  it.each([0, -1, 1.5, Number.NaN, 2_147_483_648])("rejects invalid timeout %s", (timeoutMs) => {
+    expect(() => createApp({ timeoutMs })).toThrow();
+  });
+  it.each([0, -1, 1.5, Number.NaN])("rejects invalid app capacity %s", (maxUploads) => {
+    expect(() => createApp({ maxUploads })).toThrow();
   });
 });

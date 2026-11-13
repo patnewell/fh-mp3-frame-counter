@@ -120,7 +120,7 @@ describe("incremental metadata compatibility", () => {
   });
 
   it("accepts forward TAG chains without charging APE payload lookalikes as alternatives", async () => {
-    // 002 speculated backward over these descriptors; 005 commits recognized forward tags.
+    // Recognizing TAG at a boundary must avoid speculative interpretations of its payload.
     const overlapping = id3v1();
     const decoy = ape();
     decoy.writeUInt32LE(256, 12);
@@ -145,6 +145,7 @@ describe("incremental metadata compatibility", () => {
   it("bounds alternative chains within the unknown suffix allowance", async () => {
     const suffix = ambiguousUnknownSuffix();
     expect(suffix.length).toBe(65_409);
+    // Check the reason here: this malformed suffix could also fail without reaching the budget.
     await expect(count(Buffer.concat([frame(), suffix]))).rejects.toThrow(
       /alternative metadata chains/,
     );

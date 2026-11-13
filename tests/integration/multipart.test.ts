@@ -1,18 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { request } from "node:http";
-import { setTimeout as delay } from "node:timers/promises";
-import { describe, expect, it } from "vitest";
-import { fixturePath, formFor, withHttpApp } from "../helpers/http.ts";
-
-function multipartBytes(bytes: Uint8Array, boundary = "mp3-boundary"): Buffer {
-  return Buffer.concat([
-    Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n`,
-    ),
-    bytes,
-    Buffer.from(`\r\n--${boundary}--\r\n`),
-  ]);
-}
+import { setImmediate as nextTurn } from "node:timers/promises";
+import { describe, expect, it, vi } from "vitest";
+import { countFrames } from "../../src/mp3/count.ts";
+import { within } from "../helpers/async.ts";
+import { audioBytes, fixturePath, formFor, multipart, withHttpApp } from "../helpers/http.ts";
+import { withUploadApp } from "../helpers/upload-lifecycle.ts";
 
 describe("multipart request contract", () => {
   it.each([
@@ -27,7 +19,7 @@ describe("multipart request contract", () => {
       const response = await fetch(`${url}/file-upload`, {
         method: "POST",
         headers: { "content-type": contentType },
-        body: new Uint8Array(multipartBytes(await readFile(fixturePath("cbr-stereo-44100.mp3")))),
+        body: new Uint8Array(multipart(await audioBytes(), { boundary: "mp3-boundary" })),
       });
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ frameCount: 21 });
@@ -87,9 +79,7 @@ describe("multipart request contract", () => {
           "content-encoding": "identity",
           "content-type": `multipart/form-data; boundary="${boundary}"`,
         },
-        body: new Uint8Array(
-          multipartBytes(await readFile(fixturePath("cbr-stereo-44100.mp3")), boundary),
-        ),
+        body: new Uint8Array(multipart(await audioBytes(), { boundary })),
       });
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ frameCount: 21 });
@@ -109,32 +99,39 @@ describe("multipart request contract", () => {
   });
 
   it("does not finish a response while the HTTP epilogue remains open", async () => {
-    await withHttpApp({}, async ({ url }) => {
-      let responded = false;
-      const outgoing = request(`${url}/file-upload`, {
-        method: "POST",
-        headers: { "content-type": "multipart/form-data; boundary=mp3-boundary" },
-      });
-      const response = new Promise<string>((resolve, reject) => {
-        outgoing.once("error", reject);
-        outgoing.once("response", (incoming) => {
-          responded = true;
-          const chunks: Buffer[] = [];
-          incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
-          incoming.once("error", reject);
-          incoming.once("end", () => resolve(Buffer.concat(chunks).toString()));
+    const parsed = Promise.withResolvers<void>();
+    await withUploadApp(
+      {},
+      {
+        count: async (input, signal) => {
+          const result = await countFrames(input, signal);
+          parsed.resolve();
+          return result;
+        },
+      },
+      async (service) => {
+        let bodyCompleteAtResponse: boolean | undefined;
+        // Client receipt can lag behind sending. Check HTTP completion at the server's finish event.
+        service.app.server.once("request", (request, response) => {
+          response.once("finish", () => {
+            bodyCompleteAtResponse = request.complete;
+          });
         });
-      });
-      try {
-        outgoing.write(multipartBytes(await readFile(fixturePath("cbr-stereo-44100.mp3"))));
-        // Deliberately retain the HTTP body after its closing multipart delimiter.
-        await delay(50);
-        expect(responded).toBe(false);
-        outgoing.end("epilogue");
-        expect(await response).toBe('{"frameCount":21}');
-      } finally {
-        outgoing.destroy();
-      }
-    });
+        const upload = service.open();
+        const responded = vi.fn();
+        upload.request.once("response", responded);
+        upload.request.write(multipart(await audioBytes()));
+        await within(parsed.promise);
+        // Let the route continue after parsing while HTTP EOF is still withheld.
+        await nextTurn();
+        expect(responded).not.toHaveBeenCalled();
+        expect(service.admission.active).toBe(1);
+        upload.request.end("epilogue");
+        const response = await within(upload.response);
+        expect(response.status).toBe(200);
+        expect(JSON.parse(response.body)).toEqual({ frameCount: 21 });
+        expect(bodyCompleteAtResponse).toBe(true);
+      },
+    );
   });
 });

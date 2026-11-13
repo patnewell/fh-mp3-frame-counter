@@ -1,64 +1,14 @@
-import { readFile } from "node:fs/promises";
-import { type ClientRequest, request as httpRequest, type IncomingHttpHeaders } from "node:http";
+import type { ClientRequest } from "node:http";
 import type { FastifyInstance } from "fastify";
 import { type AppOptions, createApp } from "../../src/app.ts";
 import type { UploadOperations } from "../../src/upload/route.ts";
-
-export const BOUNDARY = "lifecycle-boundary";
-
-export interface UploadResponse {
-  readonly status: number;
-  readonly headers: IncomingHttpHeaders;
-  readonly body: string;
-}
-
-export interface UploadExchange {
-  readonly request: ClientRequest;
-  readonly response: Promise<UploadResponse>;
-  readonly closed: Promise<void>;
-}
+import { within } from "./async.ts";
+import { BOUNDARY, openHttpUpload, type UploadExchange } from "./http.ts";
 
 interface RunningUploadApp {
   readonly app: FastifyInstance;
   readonly admission: ReturnType<typeof createApp>["admission"];
   open(headers?: Record<string, string>): UploadExchange;
-}
-
-export function barrier() {
-  const { promise, resolve } = Promise.withResolvers<void>();
-  return { promise, release: () => resolve() };
-}
-
-/** Bound test observations while the test owner still releases every deliberately held operation. */
-export async function within<T>(pending: Promise<T>, milliseconds = 2000): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      pending,
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error("Timed out waiting for lifecycle evidence.")),
-          milliseconds,
-        );
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-export function multipart(bytes: Uint8Array, filename = "client.mp3"): Buffer {
-  return Buffer.concat([
-    Buffer.from(
-      `--${BOUNDARY}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: audio/mpeg\r\n\r\n`,
-    ),
-    bytes,
-    Buffer.from(`\r\n--${BOUNDARY}--\r\n`),
-  ]);
-}
-
-export function audioBytes(): Promise<Buffer> {
-  return readFile(new URL("../fixtures/cbr-stereo-44100.mp3", import.meta.url));
 }
 
 /** Own sockets and the listening app even when an assertion or the app fails. */
@@ -74,49 +24,20 @@ export async function withUploadApp(
     await inspect({
       app,
       admission,
-      open: (headers) => openUpload(url, clients, headers),
+      open: (headers) => {
+        const upload = openHttpUpload(`${url}/file-upload`, {
+          "content-type": `multipart/form-data; boundary=${BOUNDARY}`,
+          "transfer-encoding": "chunked",
+          ...headers,
+        });
+        clients.add(upload.request);
+        upload.request.once("close", () => clients.delete(upload.request));
+        return upload;
+      },
     });
   } finally {
     for (const client of clients) client.destroy();
     app.server.closeAllConnections();
     await within(app.close());
   }
-}
-
-function openUpload(
-  url: string,
-  clients: Set<ClientRequest>,
-  headers: Record<string, string> = {},
-): UploadExchange {
-  const request = httpRequest(`${url}/file-upload`, {
-    method: "POST",
-    agent: false,
-    headers: {
-      "content-type": `multipart/form-data; boundary=${BOUNDARY}`,
-      "transfer-encoding": "chunked",
-      ...headers,
-    },
-  });
-  clients.add(request);
-  request.once("close", () => clients.delete(request));
-  const closed = new Promise<void>((resolve) =>
-    request.once("socket", (socket) => socket.once("close", () => resolve())),
-  );
-  const response = new Promise<UploadResponse>((resolve, reject) => {
-    request.once("error", reject);
-    request.once("response", (incoming) => {
-      let body = "";
-      incoming.setEncoding("utf8");
-      incoming.on("data", (chunk: string) => {
-        body += chunk;
-      });
-      incoming.once("error", reject);
-      incoming.once("end", () =>
-        resolve({ status: incoming.statusCode ?? 0, headers: incoming.headers, body }),
-      );
-    });
-  });
-  // Deliberate disconnect tests observe the original rejection after destroying the request.
-  void response.catch(() => undefined);
-  return { request, response, closed };
 }

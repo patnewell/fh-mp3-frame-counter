@@ -1,9 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
-import { type ClientRequest, type IncomingHttpHeaders, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { vi } from "vitest";
+import { within } from "./async.ts";
 
 interface ProcessResult {
   readonly code: number | null;
@@ -39,24 +40,6 @@ interface ProcessSandbox {
 export const compiledServer = new URL("../../dist/server.js", import.meta.url);
 export const compiledHealthcheck = new URL("../../dist/healthcheck.js", import.meta.url);
 
-/** A bounded observation does not transfer ownership of the underlying process or socket. */
-export async function withinProcess<T>(pending: Promise<T>, milliseconds = 5000): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      pending,
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error("Timed out observing a child process.")),
-          milliseconds,
-        );
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 /** Every child runs outside the repository; finally owns termination and the isolated cwd. */
 export async function withProcessSandbox(
   inspect: (sandbox: ProcessSandbox) => Promise<void>,
@@ -79,6 +62,7 @@ export async function withProcessSandbox(
           ...environment,
         },
         stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
       }),
     );
     children.push(child);
@@ -101,7 +85,7 @@ export async function withProcessSandbox(
     for (const { child } of children) {
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
     }
-    results = await Promise.allSettled(children.map(({ exited }) => withinProcess(exited)));
+    results = await Promise.allSettled(children.map(({ exited }) => within(exited, 5000)));
     await rm(cwd, { recursive: true, force: true });
   }
   const failed = results.find((result) => result.status === "rejected");
@@ -112,6 +96,7 @@ function observeProcess(child: ChildProcess): RunningProcess {
   let stdout = "";
   let stderr = "";
   let overflow = false;
+  let closed = false;
   const append = (stream: "stdout" | "stderr", text: string): void => {
     if (stdout.length + stderr.length + text.length > 256 * 1024) {
       overflow = true;
@@ -124,75 +109,38 @@ function observeProcess(child: ChildProcess): RunningProcess {
   const exited = new Promise<ProcessResult>((resolve, reject) => {
     child.once("error", reject);
     child.once("close", (code, signal) => {
+      closed = true;
       if (overflow) reject(new Error("The child exceeded the bounded test log allowance."));
       else resolve({ code, signal, stdout, stderr });
     });
   });
   void exited.catch(() => undefined);
   const records = (): Record<string, unknown>[] =>
-    stdout.split("\n").flatMap((line) => {
-      try {
+    // Ignore only the unfinished last line; malformed complete records must fail the test.
+    stdout
+      .split("\n")
+      .slice(0, -1)
+      .map((line) => {
         const value: unknown = JSON.parse(line);
-        return value !== null && typeof value === "object" && !Array.isArray(value)
-          ? [value as Record<string, unknown>]
-          : [];
-      } catch {
-        return []; // The final chunk may contain an incomplete JSON line.
-      }
-    });
+        if (value === null || typeof value !== "object" || Array.isArray(value))
+          throw new Error("The child wrote a non-object log record.");
+        return value as Record<string, unknown>;
+      });
   return {
     child,
     exited,
     output: () => stdout + stderr,
     records,
-    event: async (name) => {
-      const { promise, resolve, reject } = Promise.withResolvers<Record<string, unknown>>();
-      const inspect = (): void => {
-        const record = records().find((value) => value.event === name);
-        if (record) resolve(record);
-        else if (child.exitCode !== null || child.signalCode !== null)
-          reject(new Error(`Child exited before ${name}: ${stdout}${stderr}`));
-      };
-      child.stdout?.on("data", inspect);
-      child.on("close", inspect);
-      inspect();
-      try {
-        return await withinProcess(promise);
-      } finally {
-        child.stdout?.off("data", inspect);
-        child.off("close", inspect);
-      }
-    },
+    event: (name) =>
+      vi.waitUntil(
+        () => {
+          const record = records().find((value) => value.event === name);
+          if (record) return record;
+          // close follows stdio completion; exit can precede the last captured log chunk.
+          if (closed) throw new Error(`Child exited before ${name}: ${stdout}${stderr}`);
+          return undefined;
+        },
+        { timeout: 5000 },
+      ),
   };
-}
-
-export interface ProcessUpload {
-  readonly request: ClientRequest;
-  readonly response: Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>;
-}
-
-/** Raw HTTP permits deliberately unfinished bodies and explicit transport framing. */
-export function openProcessUpload(
-  url: string,
-  headers: Record<string, string> = {},
-): ProcessUpload {
-  const outgoing = request(url, { method: "POST", agent: false, headers });
-  const response = new Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>(
-    (resolve, reject) => {
-      outgoing.once("error", reject);
-      outgoing.once("response", (incoming) => {
-        let body = "";
-        incoming.setEncoding("utf8");
-        incoming.on("data", (chunk: string) => {
-          body += chunk;
-        });
-        incoming.once("error", reject);
-        incoming.once("end", () =>
-          resolve({ status: incoming.statusCode ?? 0, headers: incoming.headers, body }),
-        );
-      });
-    },
-  );
-  void response.catch(() => undefined);
-  return { request: outgoing, response };
 }

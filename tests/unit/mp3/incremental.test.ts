@@ -1,21 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { countFrames } from "../../../src/mp3/count.ts";
 import { InvalidMp3Error } from "../../../src/mp3/error.ts";
+import { within } from "../../helpers/async.ts";
 import { chunkBytes, frame } from "../../helpers/mp3.ts";
-
-async function within<T>(pending: Promise<T>): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      pending,
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("Parser did not progress before EOF.")), 2000);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 describe("incremental parser acceptance", () => {
   it("counts complete frames from an asynchronous byte source", async () => {

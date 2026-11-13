@@ -1,14 +1,15 @@
 import { once } from "node:events";
 import { connect, type Socket } from "node:net";
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { createApp } from "../../src/app.ts";
-import { audioBytes, BOUNDARY, barrier, multipart, within } from "../helpers/upload-lifecycle.ts";
+import { within } from "../helpers/async.ts";
+import { audioBytes, BOUNDARY, multipart } from "../helpers/http.ts";
 
 it("keeps the upload error contract for a pipelined request after application close begins", async () => {
   const { app, admission } = createApp();
-  const firstReady = barrier();
-  const releaseFirst = barrier();
-  const secondReady = barrier();
+  const firstReady = Promise.withResolvers<void>();
+  const releaseFirst = Promise.withResolvers<void>();
+  const secondReady = Promise.withResolvers<void>();
   let responses = 0;
   let output = "";
   let socket: Socket | undefined;
@@ -17,9 +18,9 @@ it("keeps the upload error contract for a pipelined request after application cl
   // Hold the first response after the application's onSend hook, keeping this socket active.
   app.addHook("onSend", async (_request, _reply, payload) => {
     if (++responses === 1) {
-      firstReady.release();
+      firstReady.resolve();
       await releaseFirst.promise;
-    } else secondReady.release();
+    } else secondReady.resolve();
     return payload;
   });
   try {
@@ -44,11 +45,11 @@ it("keeps the upload error contract for a pipelined request after application cl
     await within(firstReady.promise);
     closing = app.close();
     void closing.catch(() => undefined);
-    await vi.waitFor(() => expect(admission.accepting).toBe(false), { timeout: 2000 });
+    await expect.poll(() => admission.accepting, { timeout: 2000 }).toBe(false);
     socket.write(request);
     // Fastify's default closing shortcut bypasses onSend and changes the response contract.
     await within(secondReady.promise);
-    releaseFirst.release();
+    releaseFirst.resolve();
     await within(Promise.all([disconnected, closing]));
 
     const messages = output.split("HTTP/1.1 ").slice(1);
@@ -63,7 +64,7 @@ it("keeps the upload error contract for a pipelined request after application cl
     expect(JSON.parse(secondBody ?? "")).toEqual({ error: "The service is draining." });
     expect(admission.active).toBe(0);
   } finally {
-    releaseFirst.release();
+    releaseFirst.resolve();
     socket?.destroy();
     app.server.closeAllConnections();
     await within(closing ?? app.close());

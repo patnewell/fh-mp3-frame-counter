@@ -2,9 +2,10 @@ import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { describe, expect, it } from "vitest";
-import { fixturePath, formFor, withHttpApp } from "../helpers/http.ts";
+import { within } from "../helpers/async.ts";
+import { BOUNDARY, fixturePath, formFor, withHttpApp } from "../helpers/http.ts";
 import { ape, id3, id3v1 } from "../helpers/mp3.ts";
-import { BOUNDARY, within, withUploadApp } from "../helpers/upload-lifecycle.ts";
+import { withUploadApp } from "../helpers/upload-lifecycle.ts";
 
 const invalidScenarios = [
   "unsupported-mpeg2",

@@ -25,6 +25,41 @@ Ordinary tests need no media tools, database or Docker daemon.
 Real sockets exercise multipart parsing, streams and connection closure. An
 injected response alone does not establish that transport behavior.
 
+## Test helpers and conventions
+
+| Helper                              | Responsibility                                                                                                         |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `tests/helpers/http.ts`             | Fixture paths, FormData, raw multipart requests and isolated listening apps. Raw responses use Node's stream consumer. |
+| `tests/helpers/upload-lifecycle.ts` | App and socket ownership for unfinished uploads and controlled parser operations.                                      |
+| `tests/helpers/process.ts`          | Compiled children, isolated working directories, bounded output and captured JSON events.                              |
+| `tests/helpers/parser-server.ts`    | Child-process fixture using the existing counter seam to observe entry, hold work or fail after cancellation.          |
+| `tests/helpers/mp3.ts`              | Structural byte vectors and lazy chunk boundaries; real-audio expectations come from the fixture manifest.             |
+| `tests/helpers/async.ts`            | A deadline for a single promise observation, preserving the original rejection.                                        |
+
+Use `it.each` to run the same check with different inputs, and include the changing
+value in the title so failures identify the input. Use [Vitest polling assertions](https://vitest.dev/api/expect.html#poll)
+for changing state, `vi.waitUntil` when a captured value is needed, and Vitest mocks
+for call counts or one-off failures. Restore environment stubs in `afterEach`.
+Native `Promise.withResolvers` provides explicit barriers without a custom wrapper.
+
+`within` remains a small shared helper because an observation must reject on the
+first failure, without retries. Its timeout does not cancel the underlying work.
+The owning `finally` block must release barriers, destroy requests and await
+cleanup. Keep these scopes local: some cases need two independent apps, or must
+observe a process or app after a response completes.
+
+Use real timers for real sockets and child processes. Wait for parser barriers
+and captured events instead of sleeping to guess progress. Check elapsed time
+only when the deadline itself is the requirement, allowing scheduling margin.
+The epilogue cases check both successful completion after HTTP EOF and deadline
+rejection while EOF is withheld. Privacy checks await every relevant completion
+record before inspecting output. Process event waits use complete JSON lines and
+wait for stdio closure before classifying an event as missing.
+
+Prefer domain error types to internal wording. A specific reason assertion is
+useful when a malformed input could otherwise pass the test through a different
+rejection path, such as exhausting the metadata alternative-chain budget.
+
 ## Independent inputs and parser progress
 
 The supplied sample still yields **6090** physical frames. The

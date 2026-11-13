@@ -20,6 +20,7 @@ if (mode !== "hang" && mode !== "late-failure" && mode !== "observe")
 const config = readConfig(process.env);
 const application = createApp(config, {
   count: async (input, signal) => {
+    // Observe entry to interrupt a blocked read; other modes first reach valid file EOF.
     if (mode === "observe") {
       process.stdout.write(`${JSON.stringify({ event: "fixture_parser_started" })}\n`);
       return countFrames(input, signal);

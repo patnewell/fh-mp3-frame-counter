@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { within } from "../helpers/async.ts";
 
 const root = new URL("../../", import.meta.url);
 
@@ -31,23 +32,13 @@ describe("repository guardrails", () => {
         child.once("close", (code, signal) => resolve({ code, signal }));
       },
     );
-    let timer: NodeJS.Timeout | undefined;
     try {
-      const result = await Promise.race([
-        closed,
-        new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(
-            () => reject(new Error("The measurement preload kept Node alive.")),
-            2000,
-          );
-        }),
-      ]);
+      const result = await within(closed);
       expect(result).toEqual({ code: 0, signal: null });
       expect(stderr).toBe("");
     } finally {
-      clearTimeout(timer);
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-      await closed;
+      await within(closed);
     }
   });
 
@@ -77,7 +68,8 @@ describe("repository guardrails", () => {
           directory,
           probe,
         ],
-        { cwd: directory, encoding: "utf8" },
+        // A synchronous child blocks Vitest's own timeout, so bound it at the process boundary.
+        { cwd: directory, encoding: "utf8", timeout: 5000, windowsHide: true },
       );
       expect(result.error).toBeUndefined();
       expect(result.status === 0).toBe(allowed);

@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { countFrames } from "../../src/mp3/count.ts";
-import { withHttpApp } from "../helpers/http.ts";
-import {
-  audioBytes,
-  barrier,
-  multipart,
-  within,
-  withUploadApp,
-} from "../helpers/upload-lifecycle.ts";
+import { within } from "../helpers/async.ts";
+import { audioBytes, multipart, withHttpApp } from "../helpers/http.ts";
+import { withUploadApp } from "../helpers/upload-lifecycle.ts";
 
 describe("operational probes over real HTTP", () => {
   it("serves exact liveness and concurrent readiness probes without a storage dependency", async () => {
@@ -26,13 +21,13 @@ describe("operational probes over real HTTP", () => {
   });
 
   it("remains ready at upload capacity and becomes not-ready when admission stops", async () => {
-    const counting = barrier();
-    const releaseCount = barrier();
+    const counting = Promise.withResolvers<void>();
+    const releaseCount = Promise.withResolvers<void>();
     await withUploadApp(
       { maxUploads: 1 },
       {
         count: async (input, signal) => {
-          counting.release();
+          counting.resolve();
           await releaseCount.promise;
           return countFrames(input, signal);
         },
@@ -55,10 +50,10 @@ describe("operational probes over real HTTP", () => {
           const live = await fetch(`${url}/health/live`);
           expect(live.status).toBe(200);
           expect(await live.json()).toEqual({ status: "ok" });
-          releaseCount.release();
+          releaseCount.resolve();
           expect((await within(upload.response)).status).toBe(200);
         } finally {
-          releaseCount.release();
+          releaseCount.resolve();
         }
       },
     );

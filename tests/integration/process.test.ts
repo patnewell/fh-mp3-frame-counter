@@ -1,15 +1,11 @@
+import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import { createServer, type RequestListener } from "node:http";
 import { describe, expect, it, vi } from "vitest";
+import { within } from "../helpers/async.ts";
+import { audioBytes, BOUNDARY, multipart, openHttpUpload } from "../helpers/http.ts";
 import { id3 } from "../helpers/mp3.ts";
-import {
-  compiledHealthcheck,
-  compiledServer,
-  openProcessUpload,
-  withinProcess,
-  withProcessSandbox,
-} from "../helpers/process.ts";
-import { audioBytes, BOUNDARY, multipart } from "../helpers/upload-lifecycle.ts";
+import { compiledHealthcheck, compiledServer, withProcessSandbox } from "../helpers/process.ts";
 
 const uploadHeaders = { "content-type": `multipart/form-data; boundary=${BOUNDARY}` };
 const parserServer = new URL("../helpers/parser-server.ts", import.meta.url);
@@ -19,13 +15,13 @@ describe("compiled application from an unrelated directory with spaces", () => {
   it("parses incoming bytes in the normal server entrypoint before file or HTTP EOF", async () => {
     await withProcessSandbox(async (sandbox) => {
       const service = await sandbox.server();
-      const upload = openProcessUpload(`${service.url}/file-upload`, uploadHeaders);
+      const upload = openHttpUpload(`${service.url}/file-upload`, uploadHeaders);
       try {
         upload.request.write(
           `--${BOUNDARY}\r\nContent-Disposition: form-data; name="file"; filename="private.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n`,
         );
         upload.request.write(Buffer.from("49443305000000000000", "hex")); // Invalid ID3 version.
-        const response = await withinProcess(upload.response, 2000);
+        const response = await within(upload.response, 2000);
         expect(response.status).toBe(400);
         expect(JSON.parse(response.body)).toEqual({
           error: "The file is not a complete supported MPEG-1 Layer III stream.",
@@ -49,10 +45,10 @@ describe("compiled application from an unrelated directory with spaces", () => {
       expect(ready.status).toBe(200);
       expect(await ready.json()).toEqual({ status: "ready" });
       const body = multipart(await readFile(new URL("../fixtures/sample.mp3", import.meta.url)));
-      const upload = openProcessUpload(`${service.url}/file-upload`, uploadHeaders);
+      const upload = openHttpUpload(`${service.url}/file-upload`, uploadHeaders);
       try {
         upload.request.end(body);
-        const response = await withinProcess(upload.response);
+        const response = await within(upload.response, 5000);
         expect(response.status).toBe(200);
         expect(response.headers["content-type"]).toMatch(/^application\/json/);
         expect(JSON.parse(response.body)).toEqual({ frameCount: 6090 });
@@ -72,7 +68,7 @@ describe("compiled application from an unrelated directory with spaces", () => {
     async (name, value) => {
       await withProcessSandbox(async (sandbox) => {
         const process = sandbox.start(compiledServer, { [name]: value });
-        const result = await withinProcess(process.exited);
+        const result = await within(process.exited, 5000);
         expect(result).toMatchObject({ code: 1, signal: null });
         expect(process.records().some((record) => record.event === "server_started")).toBe(false);
         if (value.startsWith("private-")) expect(process.output()).not.toContain(value);
@@ -87,7 +83,7 @@ describe("compiled application from an unrelated directory with spaces", () => {
         HOST: "0.0.0.0",
         PORT: String(service.port),
       });
-      expect(await withinProcess(probe.exited)).toMatchObject({ code: 0, stdout: "", stderr: "" });
+      expect(await within(probe.exited, 5000)).toMatchObject({ code: 0, stdout: "", stderr: "" });
     });
   });
 
@@ -104,40 +100,45 @@ describe("compiled application from an unrelated directory with spaces", () => {
       ];
       const body = multipart(
         Buffer.concat([id3(Buffer.from("PRIVATE_BYTES")), await audioBytes()]),
-        "PRIVATE_FILENAME.mp3",
+        { filename: "PRIVATE_FILENAME.mp3" },
       );
-      const upload = openProcessUpload(`${service.url}/file-upload?token=PRIVATE_QUERY`, {
+      const upload = openHttpUpload(`${service.url}/file-upload?token=PRIVATE_QUERY`, {
         ...uploadHeaders,
         "x-request-id": "PRIVATE_CLIENT_ID",
         authorization: "Bearer PRIVATE_HEADER",
       });
       try {
         upload.request.end(body);
-        const response = await withinProcess(upload.response);
+        const response = await within(upload.response, 5000);
         expect(response.status).toBe(200);
         expect(JSON.parse(response.body)).toEqual({ frameCount: 21 });
         const requestId = response.headers["x-request-id"];
         expect(requestId).toMatch(
           /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
         );
-        await (await fetch(`${service.url}/PRIVATE_UNKNOWN_ROUTE?secret=PRIVATE_QUERY`)).text();
-        await vi.waitFor(
+        const unmatched = await fetch(`${service.url}/PRIVATE_UNKNOWN_ROUTE?secret=PRIVATE_QUERY`);
+        await unmatched.text();
+        const completed = await vi.waitUntil(
           () =>
-            expect(
-              service.process
-                .records()
-                .some(
-                  (record) =>
-                    record.event === "request_completed" && record.requestId === requestId,
-                ),
-            ).toBe(true),
+            service.process
+              .records()
+              .find(
+                (record) => record.event === "request_completed" && record.requestId === requestId,
+              ),
           eventually,
         );
+        // Wait for both requests' logs before inspecting them for leaked client values.
+        await expect
+          .poll(
+            () =>
+              service.process
+                .records()
+                .find((record) => record.requestId === unmatched.headers.get("x-request-id")),
+            eventually,
+          )
+          .toMatchObject({ event: "request_completed", route: "unmatched", statusCode: 404 });
         for (const marker of markers) expect(service.process.output()).not.toContain(marker);
         expect(service.process.output()).not.toContain(JSON.stringify(sandbox.cwd).slice(1, -1));
-        const completed = service.process
-          .records()
-          .find((record) => record.event === "request_completed" && record.requestId === requestId);
         expect(completed).toMatchObject({ route: "upload", statusCode: 200 });
         expect(completed).not.toHaveProperty("req");
         expect(completed).not.toHaveProperty("res");
@@ -161,7 +162,7 @@ describe("compiled application from an unrelated directory with spaces", () => {
             `\r\n--${BOUNDARY}\r\nPRIVATE_MALFORMED_HEADER\r\n\r\nPRIVATE_MALFORMED_BODY\r\n--${BOUNDARY}--\r\n`,
           ),
         ]);
-        const upload = openProcessUpload(`${service.url}/file-upload`, {
+        const upload = openHttpUpload(`${service.url}/file-upload`, {
           ...uploadHeaders,
           ...(framing === "content-length"
             ? { "content-length": String(body.length) }
@@ -172,7 +173,7 @@ describe("compiled application from an unrelated directory with spaces", () => {
             upload.request.write(body.subarray(0, valid.length - suffix.length));
             upload.request.end(body.subarray(valid.length - suffix.length));
           } else upload.request.end(body);
-          const response = await withinProcess(upload.response);
+          const response = await within(upload.response, 5000);
           expect(response.status).toBe(413);
           expect(JSON.parse(response.body)).toEqual({
             error: "The upload exceeds a multipart limit.",
@@ -191,14 +192,14 @@ describe("compiled application from an unrelated directory with spaces", () => {
   it("observes a parser failure after timeout without printing its exception", async () => {
     await withProcessSandbox(async (sandbox) => {
       const service = await sandbox.server(
-        { LOG_LEVEL: "trace", REQUEST_TIMEOUT_MS: "500" },
+        { LOG_LEVEL: "trace", REQUEST_TIMEOUT_MS: "1000" },
         parserServer,
         ["late-failure"],
       );
-      const upload = openProcessUpload(`${service.url}/file-upload`, uploadHeaders);
+      const upload = openHttpUpload(`${service.url}/file-upload`, uploadHeaders);
       try {
         upload.request.end(multipart(await audioBytes()));
-        const response = await withinProcess(upload.response);
+        const response = await within(upload.response, 5000);
         expect(response.status).toBe(503);
         expect(JSON.parse(response.body)).toEqual({ error: "The upload deadline expired." });
         const failure = await service.process.event("upload_failed");
@@ -215,9 +216,9 @@ describe("compiled application from an unrelated directory with spaces", () => {
 describe("compiled silent healthcheck", () => {
   it.each(["0", "not-a-port", "65536"])("rejects invalid probe port %s silently", async (PORT) => {
     await withProcessSandbox(async (sandbox) => {
-      expect(
-        await withinProcess(sandbox.start(compiledHealthcheck, { PORT }).exited),
-      ).toMatchObject({ code: 1, stdout: "", stderr: "" });
+      expect(await within(sandbox.start(compiledHealthcheck, { PORT }).exited, 5000)).toMatchObject(
+        { code: 1, stdout: "", stderr: "" },
+      );
     });
   });
 
@@ -227,7 +228,7 @@ describe("compiled silent healthcheck", () => {
       async (port) => {
         await withProcessSandbox(async (sandbox) => {
           expect(
-            await withinProcess(sandbox.start(compiledHealthcheck, { PORT: String(port) }).exited),
+            await within(sandbox.start(compiledHealthcheck, { PORT: String(port) }).exited, 5000),
           ).toMatchObject({ code: 0, stdout: "", stderr: "" });
         });
       },
@@ -243,7 +244,7 @@ describe("compiled silent healthcheck", () => {
       async (port) => {
         await withProcessSandbox(async (sandbox) => {
           expect(
-            await withinProcess(sandbox.start(compiledHealthcheck, { PORT: String(port) }).exited),
+            await within(sandbox.start(compiledHealthcheck, { PORT: String(port) }).exited, 5000),
           ).toMatchObject({ code: 1, stdout: "", stderr: "" });
         });
       },
@@ -260,9 +261,7 @@ describe("compiled silent healthcheck", () => {
     );
     await withProcessSandbox(async (sandbox) => {
       expect(
-        await withinProcess(
-          sandbox.start(compiledHealthcheck, { PORT: String(closedPort) }).exited,
-        ),
+        await within(sandbox.start(compiledHealthcheck, { PORT: String(closedPort) }).exited, 5000),
       ).toMatchObject({ code: 1, stdout: "", stderr: "" });
     });
   });
@@ -284,8 +283,9 @@ describe("compiled silent healthcheck", () => {
         async (port) => {
           await withProcessSandbox(async (sandbox) => {
             const started = performance.now();
-            const result = await withinProcess(
+            const result = await within(
               sandbox.start(compiledHealthcheck, { PORT: String(port) }).exited,
+              5000,
             );
             const elapsed = performance.now() - started;
             expect(result).toMatchObject({ code: 1, stdout: "", stderr: "" });
@@ -307,7 +307,7 @@ describe.skipIf(process.platform === "win32")("compiled POSIX shutdown handlers"
         "observe",
       ]);
       const body = multipart(await audioBytes());
-      const upload = openProcessUpload(`${service.url}/file-upload`, {
+      const upload = openHttpUpload(`${service.url}/file-upload`, {
         ...uploadHeaders,
         "transfer-encoding": "chunked",
       });
@@ -317,10 +317,10 @@ describe.skipIf(process.platform === "win32")("compiled POSIX shutdown handlers"
         service.process.child.kill("SIGTERM");
         await service.process.event("shutdown_started");
         upload.request.end(body.subarray(body.length - 8));
-        const response = await withinProcess(upload.response);
+        const response = await within(upload.response, 5000);
         expect(response.status).toBe(200);
         expect(JSON.parse(response.body)).toEqual({ frameCount: 21 });
-        expect(await withinProcess(service.process.exited)).toMatchObject({
+        expect(await within(service.process.exited, 5000)).toMatchObject({
           code: 0,
           signal: null,
         });
@@ -339,7 +339,7 @@ describe.skipIf(process.platform === "win32")("compiled POSIX shutdown handlers"
   it("cancels an unfinished upload after SIGINT grace and exits zero when parser work settles", async () => {
     await withProcessSandbox(async (sandbox) => {
       const service = await sandbox.server({ SHUTDOWN_GRACE_MS: "150" }, parserServer, ["observe"]);
-      const upload = openProcessUpload(`${service.url}/file-upload`, {
+      const upload = openHttpUpload(`${service.url}/file-upload`, {
         ...uploadHeaders,
         "transfer-encoding": "chunked",
       });
@@ -349,8 +349,8 @@ describe.skipIf(process.platform === "win32")("compiled POSIX shutdown handlers"
         await service.process.event("fixture_parser_started");
         service.process.child.kill("SIGINT");
         await service.process.event("shutdown_forced");
-        await expect(withinProcess(upload.response)).rejects.toThrow();
-        expect(await withinProcess(service.process.exited)).toMatchObject({
+        await expect(within(upload.response, 5000)).rejects.toThrow();
+        expect(await within(service.process.exited, 5000)).toMatchObject({
           code: 0,
           signal: null,
         });
@@ -367,7 +367,7 @@ describe.skipIf(process.platform === "win32")("compiled POSIX shutdown handlers"
         parserServer,
         ["hang"],
       );
-      const upload = openProcessUpload(`${service.url}/file-upload`, uploadHeaders);
+      const upload = openHttpUpload(`${service.url}/file-upload`, uploadHeaders);
       let repeatedSignal: NodeJS.Timeout | undefined;
       try {
         upload.request.end(multipart(await audioBytes()));
@@ -378,7 +378,7 @@ describe.skipIf(process.platform === "win32")("compiled POSIX shutdown handlers"
         // A reset-on-signal implementation could never finish while this parent keeps signalling.
         repeatedSignal = setInterval(() => service.process.child.kill("SIGINT"), 40);
         await service.process.event("shutdown_forced");
-        const result = await withinProcess(service.process.exited);
+        const result = await within(service.process.exited, 5000);
         const elapsed = performance.now() - started;
         expect(result).toMatchObject({ code: 1, signal: null });
         expect(elapsed).toBeGreaterThanOrEqual(950);
@@ -406,7 +406,7 @@ async function withProbeServer(
 ): Promise<void> {
   const server = createServer(handler);
   try {
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    await once(server.listen(0, "127.0.0.1"), "listening");
     const address = server.address();
     if (address === null || typeof address === "string")
       throw new Error("No listening probe port.");
