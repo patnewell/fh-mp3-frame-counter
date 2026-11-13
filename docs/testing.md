@@ -55,7 +55,13 @@ The [005 compatibility matrix](../specs/005-incremental-mp3-parsing/spec.md#comp
 explicitly replaces seek-based synthetic expectations. Tests now reject a free
 layout after a locally committed false boundary, enforce fixed distance/search/run
 bounds, prefer recognized forward metadata and bound unknown trailing suffixes.
-The fixture oracles, ordinary framing and malformed-envelope assertions remain.
+The fixture oracles, ordinary framing and truncated-extent assertions remain.
+The [S18 amendment](../specs/005-incremental-mp3-parsing/spec.md#count-only-metadata-amendment-2026-11-13)
+replaces metadata-conformance rejections with successful counts when lengths
+remain usable. Unit cases cover ignored fields, conflicting descriptors,
+forward/backward size ownership, fallback between suffix layouts and retained
+resource/cancellation bounds. Real HTTP cases count audio with differing ID3
+footers or APE reserved bytes and still reject truncated declared metadata.
 
 ## Deterministic lifecycle tests
 

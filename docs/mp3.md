@@ -83,18 +83,27 @@ records all superseded synthetic expectations.
 
 ## Metadata at established boundaries
 
-Leading ID3v2.2/2.3/2.4 declares a synchsafe body length. Validate its version,
-flags, length bytes and any required paired footer, while skipping body bytes
-incrementally. Leading paired APEv2 works the same way. No large declared body
-needs to be retained.
+Metadata is skipped to locate audio, rather than checked for full conformance.
+An ID3v2.2/2.3/2.4 header declares a synchsafe body length. Read the supported
+major version and length, then skip the body incrementally. In v2.4 only, the
+footer flag adds ten more bytes. A paired APEv2 header supplies its own extent
+in the same way. No large declared body needs to be retained.
 
 After audio, recognized forward envelopes take ownership of their whole extent:
 
-| Envelope         | Forward treatment                                                          |
-| ---------------- | -------------------------------------------------------------------------- |
-| ID3v1            | Consume exactly 128 bytes beginning with `TAG`                             |
-| Paired APEv2     | Validate the header, skip its declared payload and match the footer        |
-| Appended ID3v2.4 | Require its paired footer, skip its declared payload and match descriptors |
+| Envelope        | Forward treatment                                                            |
+| --------------- | ---------------------------------------------------------------------------- |
+| ID3v1           | Consume exactly 128 bytes beginning with `TAG`                               |
+| Paired APEv2    | Read the supported header layout and skip its declared size including footer |
+| ID3v2.2/2.3/2.4 | Skip the declared body and any footer indicated by a v2.4 header             |
+
+ID3 revision numbers and unrelated flags, APE item counts, reserved bytes and
+read-only flags do not locate frames, so they are ignored. A forward header's
+size determines which bytes to skip; its footer is not compared or inspected.
+For example, a differing footer item count or size does not change a count based
+on an already established leading extent. A missing byte from that extent still
+fails as truncated input. Unusable sizes, unknown layout versions and APE role
+bits that cannot identify a supported header/footer remain errors.
 
 Once terminal metadata begins, audio counting cannot resume. A frame-like or
 tag-like value inside an established frame/envelope is payload. Forward tag
@@ -103,24 +112,25 @@ still apply.
 
 Footer-only APEv1/v2 does not declare its payload length until the end. At an
 unknown terminal boundary, retain **at most 64 KiB** of the remaining suffix,
-then validate complete chains backward at EOF with **4096 alternative selections**
+then locate complete chains backward at EOF with **4096 alternative selections**
 at most. Reject a larger unknown suffix immediately. This allowance also bounds
 ambiguous footer-only combinations; it does not restrict declared forward bodies.
 Recognized forward envelopes take precedence over descriptors inside their payload.
 
-`consumeMetadata` receives a prefix already read by the counter. It returns
-`continue` after consuming a recognised tag, or `end-of-stream` after validating
-the complete unknown suffix. For the latter case, validation starts at the end
-of the buffered suffix and works backward through possible complete tags.
-Reaching offset zero proves that every buffered byte belongs to metadata. A
-failed interpretation allows another saved boundary to be tried; leftover junk
-rejects the suffix if none of those interpretations accounts for it.
+`consumeMetadata` receives a prefix already read by the counter and consumes one
+recognised tag or the complete unknown suffix. It returns no result; the counter
+reads again to observe the next boundary or EOF. Unknown-suffix traversal starts
+at the end of the buffered bytes and works backward using footer sizes. When a
+footer declares a separate header, its signature must appear at the calculated
+start, but other header fields need not match. Reaching offset zero accounts for
+every buffered byte as metadata. A failed interpretation allows another saved
+boundary to be tried; leftover junk rejects the suffix if no layout covers it.
 
 The two metadata budgets protect different resources. The 64 KiB allowance caps
 retained memory when the length arrives only in a footer. The 4096-alternative
 allowance caps work caused by overlapping possible tag boundaries. Large tags
 with a leading length do not need that buffer, and ordinary forward tag chains
-do not consume the ambiguity allowance. Backward validation still yields and
+do not consume the ambiguity allowance. Backward searching still yields and
 checks cancellation after source EOF, because searching buffered bytes uses CPU.
 
 Size fields also differ by format: ID3's declared payload size excludes both
@@ -128,14 +138,15 @@ header and footer, whereas APE's declared size includes its footer but excludes
 a separate header. The descriptor helpers name those values explicitly so the
 forward skip and backward boundary calculations use the same convention.
 
-APE checks cover versions, size, reserved bytes, allowed flags and required pairs.
-APEv1 is footer-only and requires zero flags; v2-only header flags cannot create
-a v1 pair. Malformed pairs, incomplete envelopes and junk are invalid.
+APEv1 remains footer-only; its flags are ignored rather than interpreted as v2
+layout flags. Relaxed metadata checks can admit extra possible suffix layouts.
+The alternative-search limit still applies, so inputs with excessive overlapping
+interpretations can be rejected even if one layout would eventually fit.
 
 Primary format references: [ID3v2.4 structure](https://id3.org/id3v2.4.0-structure),
 [APEv2 specification](https://wiki.hydrogenaudio.org/index.php?title=APEv2_specification)
 and [TagLib's bundled APE format](https://github.com/taglib/taglib/blob/master/taglib/ape/ape-tag-format.txt).
-The parser validates envelope framing, not individual metadata item semantics.
+These references describe the formats; the counter uses only their boundary fields.
 
 ## Physical carriers and independent expectations
 
@@ -153,4 +164,6 @@ headers, no-frame input, incomplete frames/tags and invalid trailing bytes.
 Parsing and provisional counting begin before upload EOF; a successful response
 still requires the complete valid file, multipart envelope and HTTP body.
 A plausible framing layout may contain invalid compressed samples, CRCs or
-metadata items. This is structural counting, not decoding or malware inspection.
+metadata descriptors or items. A correct count relies on usable boundary lengths;
+the parser cannot recover audio hidden by an incorrect declared extent. This is
+structural counting, not decoding or metadata conformance certification.

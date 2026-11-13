@@ -31,3 +31,7 @@
 ## Directory readability
 
 - [x] [T08] Resolve the directory assessment's six clarity findings in the existing modules: explain metadata traversal/limits/lengths, make counting phases and header ownership explicit, name MPEG fields and reader coordinates/contracts, align free-format names, preserve behavior and fixtures, update the guide, review the complete diff and record the focused/full/resource checks actually run.
+
+## Count-only metadata correction
+
+- [x] [T09] Establish failing tolerant-metadata regressions for S18, simplify forward skipping and bounded suffix extent detection, deliberately replace strict conformance assertions while preserving boundary/safety/fixture evidence, update current docs, apply `review-change` to the complete correction and record actual focused/full verification.

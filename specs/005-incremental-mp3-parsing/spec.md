@@ -110,6 +110,29 @@ it in the standalone healthcheck. Do not load `.env` automatically or expose
 validation details in process startup failures. This supersedes 004 O01's
 strict-decimal and custom-host validation policy; historical evidence is unchanged.
 
+## Count-only metadata amendment (2026-11-13)
+
+**S18:** Metadata support exists to locate audio, not certify tag conformance.
+This supersedes S07/S08's strict descriptor/pair validation and the corresponding
+002 compatibility policy. At an established boundary, a supported ID3v2 header
+or paired APEv2 header owns its declared extent. Skip that extent, including any
+declared footer, without comparing descriptors or validating metadata contents.
+ID3v2.2/2.3/2.4 headers may also appear after audio; only v2.4's footer flag adds
+ten bytes. Ignore ID3 revisions/unrelated flags and APE item counts, reserved
+bytes, read-only/unrelated flags and differences in a skipped footer.
+
+Retain the signatures, supported layout versions, usable length encodings and
+header/footer role bits needed to locate boundaries. For an unknown terminal
+suffix, use footer sizes backward; a declared separate header must have its
+signature at the calculated start, but its other fields need not match the
+footer. APEv1 footer flags do not affect its footer-only extent. Account for the
+entire bounded suffix rather than silently accepting arbitrary remaining bytes.
+Keep existing memory/work limits, candidate preference, cancellation, iterator
+ownership and rejection of unsupported audio, no frames, truncated extents and
+audio resuming after terminal metadata. All fixture identities/counts remain.
+These rules count structurally identifiable frames; they do not promise to
+recover a correct count when metadata length/layout information is unusable.
+
 ## Acceptance scenarios and evidence
 
 Test every header split, one-byte/varied chunks, multiple frames per chunk,

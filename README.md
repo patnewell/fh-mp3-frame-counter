@@ -84,8 +84,10 @@ server; it has no separate application bootstrap.
 Ordinary CBR/VBR uses each frame's header. Free-format commits the first
 compatible boundary within 128 KiB, with fixed search/run limits. Declared
 metadata bodies are skipped incrementally; an unknown footer-only suffix is
-limited to 64 KiB. The [MP3 guide](docs/mp3.md) explains these streaming
-compatibility rules and their deliberate differences from the historical seek parser.
+limited to 64 KiB. Metadata fields are checked only where needed to locate
+boundaries; unrelated tag defects do not invalidate a count. The
+[MP3 guide](docs/mp3.md) explains these streaming compatibility rules and their
+deliberate differences from the historical seek parser.
 
 ## Container evaluation
 

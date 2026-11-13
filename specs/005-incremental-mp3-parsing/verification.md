@@ -507,3 +507,114 @@ unchanged 256 MiB ceiling. Separate client peak RSS was 75,141,120 bytes. This i
 resource-regression evidence for that input, not a production benchmark.
 Docker and other-platform checks were not rerun; previous qualifications remain.
 The correction remains uncommitted at the time of verification; no push was made.
+
+## Original assignment scope assessment (2026-11-13)
+
+Reviewed all four pages of `docs/assignment.pdf` and the parser on clean
+`41ce745a44dc47cbe89d75a2d875b34e30408aac`. The PDF requires logical MPEG-1
+Layer III frame counting, TypeScript, no direct MP3 parsing dependency and correct
+JSON, with readability, errors, large-file handling and performance as evaluation
+criteria. It explicitly excludes other MPEG formats. It does not explicitly
+require APE versions, metadata-chain ambiguity handling or a metadata validator;
+its five-day guidance prioritises a working, understandable solution. The local
+002/005 metadata requirements describe later repository scope, not additional
+requirements found in the original PDF.
+
+The count/header traversal, per-frame indexed CBR/VBR sizes, padding, physical
+carrier counting, rejection of unsupported versions/layers, stream cursor and
+small domain error are justified by the assignment and the later streaming
+request. Free-format remains a MPEG-1 Layer III variant; its discovery step is
+not automatically excluded by the prohibition on other MPEG formats. Its exact
+search caps, candidate-confirmation policy and code organisation are local
+implementation choices, not assignment requirements.
+
+The sample has a leading ID3v2.4 header declaring 34 body bytes, placing audio at
+offset 44; it does not require APE handling. Common metadata skipping prevents
+metadata from being counted as audio. APEv1/v2, paired leading/trailing APE,
+appended paired ID3v2.4, stacked mixed tags, strict descriptor conformance and
+unknown-tail backward ambiguity search are additional compatibility scope.
+`consumeUnknownSuffix`, `validateMetadataSuffix` and `findTagStartCandidates`
+are the strongest simplification candidates if footer-only/mixed metadata
+compatibility is intentionally dropped. The associated limits and checkpoints
+protect resources for those features; they do not independently justify retaining
+them. The code validates metadata envelopes, not item values or compressed audio.
+
+APE metadata does not change the underlying audio's MPEG version/layer. Removing
+APE support can reject otherwise valid MPEG-1 Layer III audio files carrying
+those tags, so a narrower supported-input contract must be stated explicitly.
+Likewise existing free-format commitment and resource limits do not prove
+universal MPEG conformance. The assessment recommends retaining the core counter,
+efficient streaming, common ID3 handling and error boundaries, and making an
+explicit compatibility choice before deleting APE/ambiguous-footer support.
+No parser or test changes were made; scope choices remain recommendations.
+
+Two parallel read-only reviews checked parser and metadata scope. The focused
+parser/fixture command passed **149 tests across seven files**, including the
+unchanged sample's **6090 frames**, all committed fixture identities and counts,
+and unsupported MPEG-2 rejection. The full gate, resource and container checks
+were not rerun for this read-only assessment. This entry records findings rather
+than claiming additional implementation or universal-format coverage.
+
+## Count-only metadata correction (2026-11-13)
+
+Implemented the user's approved simplification as S18/T09 in the owning feature.
+Tested the uncommitted working tree based on
+`41ce745a44dc47cbe89d75a2d875b34e30408aac`, with Node **24.22.3** and npm
+**11.19.1**. The preceding scope-assessment entry was already uncommitted and is
+preserved. No commit or push was made.
+
+Forward ID3/paired APE traversal now skips the declared extent, including any
+declared footer, without inspecting or comparing footer fields. ID3 revisions
+and unrelated flags, APE item counts, reserved bytes and unrelated flags no
+longer cause rejection. ID3's footer flag adds bytes only for v2.4. Supported
+ID3 headers without footers also work after audio. Backward suffix discovery
+uses nullable extent candidates and header signatures; metadata-pair equality,
+exception-based candidate handling and saved conformance errors are removed.
+`consumeMetadata` returns void, and the counter observes EOF normally. `tags.ts`
+shrinks from 327 to 247 lines; the existing six-module separation remains.
+
+Seven new tolerance cases failed against the unchanged parser before source
+changes. Strict-policy assertions were deliberately replaced with successful
+counts, rather than removed wholesale. Additional cases retain failures for
+unusable boundary fields, missing boundary signatures, truncated extents and
+audio after terminal metadata. HTTP tests now accept differing ID3 footers and
+nonzero APE reserved bytes, while truncated ID3/APE extents still return safe
+400 responses and allow subsequent valid uploads. Fixture bytes/hashes/counts,
+coverage thresholds and exclusions are unchanged; the supplied sample remains
+**6090** physical frames.
+
+Applied `review-change` to the complete diff, affected stream-reader and upload
+callers, tests and current guides. Checked forward/backward length ownership,
+v2.4-only footer interpretation, full suffix coverage, candidate preference,
+fixed budgets, post-EOF cancellation, reused producer chunks, iterator release
+and unchanged request/admission ownership. Review resolved misleading strict
+test descriptions and tag-only rejection cases that could pass simply because
+no audio existed; those tolerance cases now include actual counted frames.
+An EOF regression proves suffix processing does not pull the source twice after
+EOF and still returns its iterator once. No unresolved findings remain.
+
+The existing first-boundary policy and resource bounds remain compatibility
+limits. Relaxing footer candidates can increase overlapping interpretations;
+fallback and ambiguity-budget tests pass, but arbitrary adversarial layouts are
+not promised. Incorrect declared lengths can still obscure audio; this change
+does not add recovery or metadata conformance certification. Current guides
+state these limits and distinguish them from assignment requirements.
+
+Focused parser/fixture execution passed **167 tests across seven files** before
+the final six boundary/EOF cases were added. The final `npm.cmd run verify`
+passed lint, strict typecheck, clean build and coverage: **365 passed, zero
+failed, three expected native Windows POSIX-signal skips**, across 20 files.
+Coverage: **97.94% statements, 96.08% branches, 97.59% functions, 99.23% lines**.
+An initial Markdown table-format failure was corrected before the passing gate.
+The three skips remain the existing platform guard: Windows child termination
+cannot exercise the JavaScript POSIX shutdown handlers.
+
+After that build, `node scripts/resource-check.ts` passed using the normal
+`dist/server.js`: **536,871,536 lazy file bytes**, independently expected
+**1,284,528 frames**, healthy liveness, 53 memory observations and server OS
+peak RSS **92,930,048 bytes (about 88.6 MiB)** under the unchanged 256 MiB
+ceiling. Baseline RSS was 79,020,032 bytes; separate client peak RSS was
+73,629,696 bytes. Actual execution: **2026-11-13 04:21:54.112–04:21:55.824 UTC**;
+the report identifies the base revision and `workingTreeDirty: true`.
+This measures the tested lazy input, not general production throughput.
+Docker and other-platform checks were not rerun; prior qualifications remain.

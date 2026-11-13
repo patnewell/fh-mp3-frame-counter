@@ -77,17 +77,17 @@ describe("MP3 upload API", () => {
     });
   });
 
-  it("maps a mismatched appended ID3 footer to HTTP 400 and still accepts the original audio", async () => {
+  it("counts real audio despite a mismatched appended ID3 footer", async () => {
     const audio = await readFile(fixturePath("cbr-stereo-44100.mp3"));
     const tag = id3(Buffer.from("metadata"), 4, true);
     tag[tag.length - 1] = 0;
     await withHttpApp({}, async ({ url }) => {
-      const invalid = await fetch(`${url}/file-upload`, {
+      const tagged = await fetch(`${url}/file-upload`, {
         method: "POST",
         body: formFor(Buffer.concat([audio, tag])),
       });
-      expect(invalid.status).toBe(400);
-      expect(await invalid.json()).toEqual({ error: expect.any(String) });
+      expect(tagged.status).toBe(200);
+      expect(await tagged.json()).toEqual({ frameCount: 21 });
       const valid = await fetch(`${url}/file-upload`, { method: "POST", body: formFor(audio) });
       expect(valid.status).toBe(200);
       expect(await valid.json()).toEqual({ frameCount: 21 });
@@ -109,7 +109,7 @@ describe("MP3 upload API", () => {
     });
   });
 
-  it("rejects an APE descriptor with nonzero reserved bytes", async () => {
+  it("counts real audio despite nonzero APE reserved bytes", async () => {
     const audio = await readFile(fixturePath("cbr-stereo-44100.mp3"));
     const tag = ape();
     tag[tag.length - 1] = 1;
@@ -118,8 +118,25 @@ describe("MP3 upload API", () => {
         method: "POST",
         body: formFor(Buffer.concat([audio, tag])),
       });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ frameCount: 21 });
+    });
+  });
+
+  it.each(["ID3", "APE"])("rejects a truncated declared %s extent with safe JSON", async (kind) => {
+    const audio = await readFile(fixturePath("cbr-stereo-44100.mp3"));
+    const tag =
+      kind === "ID3" ? id3(Buffer.from("metadata"), 4, true) : ape(Buffer.from("metadata"), true);
+    await withHttpApp({}, async ({ url }) => {
+      const response = await fetch(`${url}/file-upload`, {
+        method: "POST",
+        body: formFor(Buffer.concat([audio, tag.subarray(0, -1)])),
+      });
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: expect.any(String) });
+      const recovery = await fetch(`${url}/file-upload`, { method: "POST", body: formFor(audio) });
+      expect(recovery.status).toBe(200);
+      expect(await recovery.json()).toEqual({ frameCount: 21 });
     });
   });
 

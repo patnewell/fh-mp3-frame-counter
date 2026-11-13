@@ -56,18 +56,23 @@ describe("physical frame count", () => {
   it.each([
     ["short ID3 header", Buffer.from("ID3")],
     ["unknown ID3 version", Buffer.from("49443305000000000000", "hex")],
-    ["invalid revision", Buffer.from("49443304ff0000000000", "hex")],
-    ["reserved ID3 flag", Buffer.from("49443303001000000000", "hex")],
     ["non-synchsafe length", Buffer.from("49443304000000000080", "hex")],
     ["incomplete ID3 payload", Buffer.from("49443304000000000001", "hex")],
   ])("rejects a %s", async (_name, bytes) => {
     await expect(count(bytes)).rejects.toThrow(InvalidMp3Error);
   });
 
-  it("requires the declared ID3 footer to match", async () => {
+  it.each([
+    ["invalid revision", Buffer.from("49443304ff0000000000", "hex")],
+    ["reserved ID3 flag", Buffer.from("49443303001000000000", "hex")],
+  ])("counts frames after an ID3 %s that does not affect its size", async (_name, tag) => {
+    expect(await count(Buffer.concat([tag, frame()]))).toBe(1);
+  });
+
+  it("uses the declared ID3 extent without comparing its footer", async () => {
     const tag = id3(Buffer.alloc(7), 4, true);
     tag[tag.length - 1] = 1;
-    await expect(count(Buffer.concat([tag, frame()]))).rejects.toThrow(/footer/);
+    expect(await count(Buffer.concat([tag, frame()]))).toBe(1);
   });
 
   it("propagates cancellation before the first source pull", async () => {

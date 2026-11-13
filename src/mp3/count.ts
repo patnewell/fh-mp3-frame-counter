@@ -9,7 +9,8 @@ type ParsingPhase = "leading-metadata" | "audio" | "trailing-metadata";
 /**
  * Count physical MPEG-1 Layer III frames from an asynchronous byte stream.
  * Audio payloads and metadata contents are skipped rather than decoded. A successful
- * count requires at least one complete frame and valid input through EOF.
+ * count requires at least one complete frame and identifiable boundaries through
+ * EOF; metadata contents are not certified as conformant.
  *
  * Consume the source once and close its iterator on success or failure.
  * Invalid/unsupported media throws InvalidMp3Error; source errors and cancellation
@@ -38,10 +39,10 @@ export async function countFrames(
         header = readHeader(bytes);
         if (!header || phase === "trailing-metadata") {
           // Footer-only metadata can contain header-shaped bytes. After audio
-          // ends, those bytes must pass metadata validation instead of restarting audio.
+          // ends, those bytes must belong to a metadata extent instead of restarting audio.
           bytes = Buffer.from(bytes); // Metadata may outlive the producer chunk that held its prefix.
           const afterAudio = phase !== "leading-metadata";
-          if ((await consumeMetadata(input, bytes, afterAudio)) === "end-of-stream") break;
+          await consumeMetadata(input, bytes, afterAudio);
           if (afterAudio) phase = "trailing-metadata";
           continue;
         }

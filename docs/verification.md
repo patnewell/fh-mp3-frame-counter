@@ -38,7 +38,8 @@ original literal dates, counts and tested hashes.
 | Candidate ownership                                | Team guide asks for independent explanation, unfamiliar-case prediction and review; measured adoption, improved delivery and human approval are not inferred from generated artifacts                                                                    |
 
 The source count is structural. It does not validate compressed samples, CRC
-values or all metadata items. See [MP3 limits](mp3.md#deliberate-limits) and
+values or metadata conformance beyond boundary fields. See
+[MP3 limits](mp3.md#deliberate-limits) and
 [operations](operations.md) for ingress and resource boundaries. Parsing begins
 before EOF; success still requires complete valid file, multipart and HTTP input.
 

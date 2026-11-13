@@ -162,6 +162,22 @@ Retain synchronous chunk scanning rather than adding per-byte asynchronous work.
 Use existing compatibility/budget/fixture tests and all three header split points
 to verify the refactor, then review the diff and run the complete gate.
 
+## Count-only metadata refinement (2026-11-13)
+
+For S18, replace descriptor-pair conformance checks with forward extent skipping.
+Keep ID3 major-version/synchsafe-size decoding, interpreting the footer flag only
+for v2.4. Recognize paired APEv2 headers by layout roles and skip their declared
+size, which includes the footer. Backward suffix discovery uses nullable extent
+candidates, retains signature/size/layout guards and checks a declared header's
+signature without comparing metadata fields. Remove saved malformed-tag errors
+and let the counter observe EOF normally after `consumeMetadata: Promise<void>`.
+Preserve bounded alternative search, preference and post-EOF yielding; relaxing
+candidate checks can admit more possible chains, so test fallback and budget
+behavior rather than claiming universal compatibility for adversarial overlaps.
+Establish tolerant-counting regressions first, explicitly revise strict-policy
+assertions, preserve truncation/framing/ownership cases and all fixture oracles,
+update current guides, review the complete diff and run the full gate.
+
 ## Directory readability refinement (2026-11-13)
 
 Resolve the assessment's six findings within the existing six modules. Keep

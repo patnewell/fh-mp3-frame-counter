@@ -4,7 +4,8 @@
 
 `countFrames(input: AsyncIterable<Uint8Array>, signal?)` counts physical MPEG-1
 Layer III frames as bytes arrive. It owns the input iterator, returns a positive
-count only after valid EOF, and closes the iterator on completion or failure.
+count only after identifiable framing through EOF, and closes the iterator on
+completion or failure. Metadata fields unrelated to locating frames are ignored.
 `InvalidMp3Error` distinguishes invalid/unsupported media from upstream errors
 and cancellation. The parser imports no HTTP, configuration or filesystem code.
 
@@ -34,7 +35,7 @@ open a network listener.
 | `src/mp3/header.ts`       | Pure MPEG header interpretation                                              |
 | `src/mp3/reader.ts`       | Forward byte-stream cursor, small split descriptors and cooperative yielding |
 | `src/mp3/free-format.ts`  | Bounded local free-format inference                                          |
-| `src/mp3/tags.ts`         | Incremental envelopes and bounded unknown terminal suffix validation         |
+| `src/mp3/tags.ts`         | Incremental metadata skipping and bounded terminal boundary discovery        |
 | `src/mp3/count.ts`        | Frame traversal and physical counting                                        |
 | `src/mp3/error.ts`        | Domain invalid-media error                                                   |
 
@@ -47,7 +48,7 @@ and `header.ts`. The counter has three phases: leading metadata, audio and
 trailing metadata. Audio may follow leading metadata, but cannot resume after
 trailing metadata begins. The free-format helper returns an already-read next
 header; the counter reuses it rather than consuming those bytes twice.
-`tags.ts` owns metadata traversal and validation, and `reader.ts` explains the
+`tags.ts` owns metadata traversal and boundary checks, and `reader.ts` explains the
 shared stream position, buffer ownership and cooperative scheduling contracts.
 
 ## Incremental counting and retained state
