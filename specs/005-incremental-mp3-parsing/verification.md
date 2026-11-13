@@ -795,3 +795,29 @@ across **19 files**. Coverage: **98.16% statements, 95.45% branches, 100%
 functions, 99.58% lines**. Final edits after the gate add one explanatory comment
 and this record. Real POSIX signal delivery, Docker and heavy resource checks
 were not rerun. No commit or push was made for this cleanup.
+
+## Configuration readability cleanup (2026-11-13)
+
+Reviewed and cleaned up `src/config.ts` in the uncommitted working tree based on
+`0f1a62789b1a5f32532d7a36105086fa7930a723`, using pinned Node **24.22.3** on
+native Windows. Named the shared timer ceiling and integer schema; documented
+configuration ownership, units, logging defaults, ephemeral ports, standard
+coercion, immutable snapshots, validation errors and environment isolation.
+Defaults, constraints, exported types and observable behavior remain unchanged.
+
+Applied `review-change` to the maintenance diff and inspected the app, listener,
+healthcheck, configuration tests and installed env-schema implementation. Retained
+the post-coercion Infinity guard, explicit `env: false`, shared schema constraints
+and runtime freezing. No unresolved findings remain. No tests, fixtures, coverage
+settings or acceptance requirements changed; existing configuration regressions
+cover the preserved behavior. A concurrent `src/server.ts` edit was observed and
+left untouched; this review makes no completion claim for that separate edit.
+
+`npm.cmd run verify` passed lint, strict typecheck, clean build and coverage:
+**342 passed, zero failed, three expected native Windows POSIX-signal skips**,
+across **19 files**, including all **42 configuration tests**. Coverage remained
+**98.16% statements, 95.45% branches, 100% functions, 99.58% lines**. The tested
+`src/config.ts` SHA-256 is
+`38704df53aa9874376539a6ad31fd9edf6cb5a7c74d6f7f287ca91cc162b088b`.
+Only this evidence record was added afterward for this cleanup. Heavy resource
+checks, Docker and Linux/macOS execution were not rerun. No commit or push was made.
